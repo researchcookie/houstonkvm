@@ -1,0 +1,44 @@
+[Unit]
+Description=HoustonKVM Server
+After=network.target houstonkvm-hid.service
+# Wants (not Requires): server still starts even if HID gadget is unavailable
+# (QEMU QMP or CH9329 serial input backends work without it — chosen per
+# target under Admin -> Targets).
+Wants=houstonkvm-hid.service
+
+[Service]
+Type=simple
+User=houstonkvm
+Group=houstonkvm
+WorkingDirectory=/var/lib/houstonkvm
+EnvironmentFile=-/etc/houstonkvm/houstonkvm.conf
+ExecStart=/usr/bin/HoustonKVM $HOUSTONKVM_OPTS
+# Re-reads the HTTPS certificate files (e.g. after a renewal); open
+# connections carry on. Other options still need a restart.
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=houstonkvm
+
+# Hardening — filesystem is read-only except for the database directory
+# (which holds the certificates an Owner installs in Admin, in tls/).
+# /etc/houstonkvm/tls/ is read, never written.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/houstonkvm
+
+# Lets InputQueue's worker thread (src/hid/input_queue.cpp) actually get
+# the SCHED_FIFO real-time priority it requests for low-latency input
+# handling — without it, NoNewPrivileges above makes that request fail
+# silently (EPERM) and the thread just runs at normal priority, which
+# still works fine, just without the latency guarantee. CPU affinity
+# (also set by that same thread) needs no extra capability.
+AmbientCapabilities=CAP_SYS_NICE
+
+[Install]
+WantedBy=multi-user.target

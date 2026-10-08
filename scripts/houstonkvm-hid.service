@@ -1,0 +1,18 @@
+[Unit]
+Description=HoustonKVM — USB HID gadget setup
+# Run once at boot before the main service; keep "active" so the dependency is satisfied.
+DefaultDependencies=no
+Before=houstonkvm.service
+After=local-fs.target
+ConditionPathExists=/sys/class/udc
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/houstonkvm-setup-hid
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=houstonkvm-hid
+
+[Install]
+WantedBy=multi-user.target

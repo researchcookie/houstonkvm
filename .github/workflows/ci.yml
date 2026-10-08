@@ -1,0 +1,47 @@
+# Every push and pull request: build the RPM the way the README's install
+# steps do, on CentOS Stream 9. rpmbuild runs the integration suite in the
+# spec's %check, so a green run means the package builds from pinned sources
+# and the tests pass. The RPMs are kept as an artifact for a week.
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rpm:
+    runs-on: ubuntu-latest
+    container: quay.io/centos/centos:stream9
+    timeout-minutes: 60
+    steps:
+      - name: Install git
+        # actions/checkout falls back to a plain download without it.
+        run: dnf install -y git-core
+
+      - uses: actions/checkout@v4
+
+      - name: Build dependencies
+        run: |
+          dnf install -y epel-release dnf-plugins-core rpm-build
+          dnf config-manager --set-enabled crb epel-cisco-openh264
+          dnf builddep -y houstonkvm.spec
+
+      - name: Sources
+        run: |
+          version=$(rpmspec -q --qf '%{version}\n' houstonkvm.spec | head -1)
+          bash scripts/fetch-rpm-sources.sh "$HOME/rpmbuild/SOURCES" "$version"
+
+      - name: Build and test
+        run: rpmbuild -ba houstonkvm.spec
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpms
+          path: |
+            ~/rpmbuild/RPMS/*/*.rpm
+            ~/rpmbuild/SRPMS/*.rpm
+          retention-days: 7

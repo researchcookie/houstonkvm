@@ -1,0 +1,257 @@
+.TH HOUSTONKVM 8 2026-10-02 "HoustonKVM" "System Administration"
+.SH NAME
+HoustonKVM \- IP-KVM server: drive real machines from a web browser
+.SH SYNOPSIS
+.B HoustonKVM
+.RB [ \-\-port=\fIN\fR ]
+.RB [ \-\-bind=\fIADDR\fR ]
+.RB [ \-\-db=\fIPATH\fR ]
+.RB [ \-\-secure\-cookies ]
+.RB [ \-\-trusted\-proxy=\fIADDR\fR ]...
+.RB [ \-\-allowed\-origin=\fIURL\fR ]...
+.RB [ \-\-audit\-retention\-days=\fIN\fR ]
+.RB [ \-\-ice\-server=\fIURL\fR | none ]...
+.RB [ \-\-tls=on | off ]
+.RB [ \-\-https\-port=\fIN\fR ]
+.RB [ \-\-tls\-cert=\fIFILE\fR " " \-\-tls\-key=\fIFILE\fR ]
+.br
+.B HoustonKVM
+.BR \-\-version " | " \-\-help
+.SH DESCRIPTION
+.B HoustonKVM
+shows the screens of machines wired to this one through capture devices, and
+sends them keyboard and mouse input through a USB HID gadget, a CH9329 serial
+adapter, or a QEMU monitor socket. Users sign in to its web interface or call
+its API.
+.PP
+Installed from the package, it runs as the
+.B houstonkvm
+service (user
+.BR houstonkvm ),
+with its options in
+.IR /etc/houstonkvm/houstonkvm.conf .
+.PP
+Only the options below are set on the command line. Everything else is
+configured at runtime by an Owner in the web interface (Admin) or through the
+API, kept in the database, and takes effect without a restart: targets
+(capture device, resolution and frame rate, input adapter, video bitrate,
+name, group and tags), users and their roles, API tokens, STUN and TURN
+servers, and HTTPS. An option given here that the web interface could also
+set fixes that setting: Admin then shows it read-only, and the API refuses to
+change it.
+.SS First run
+With no accounts in the database, the server prints a one-time
+.B setup code
+to its log
+.RB ( "journalctl \-u houstonkvm" ).
+Open
+.BI http:// server :8080/
+and create the first Owner account with it.
+.SH OPTIONS
+.TP
+.BI \-\-port= N
+The plain HTTP port. Default: 8080.
+.TP
+.BI \-\-bind= ADDR
+The address to listen on, for HTTP and HTTPS. Default: 0.0.0.0, every
+interface. Use 127.0.0.1 when a reverse proxy on the same machine is the only
+client.
+.TP
+.BI \-\-db= PATH
+The SQLite database. Default:
+.I houstonkvm.db
+in the working directory; the service uses
+.IR /var/lib/houstonkvm/houstonkvm.db .
+Certificates installed through the web interface are kept in
+.I tls/
+next to it.
+.TP
+.B \-\-secure\-cookies
+Marks the plain HTTP side's session cookie Secure. Only for a reverse proxy
+that terminates TLS in front of the server: otherwise browsers silently refuse
+the cookie. Not needed for the server's own HTTPS, whose cookie is always
+Secure.
+.TP
+.BI \-\-trusted\-proxy= ADDR
+A proxy whose
+.B X\-Forwarded\-For
+header is believed, so sign-in rate limiting counts each visitor's own
+address. Repeat it for several.
+.TP
+.BI \-\-allowed\-origin= URL
+A page origin, such as
+.IR https://kvm.example.com ,
+allowed to use the session cookie. Only needed behind a proxy that doesn't
+pass the browser's
+.B Host
+header through. Repeat it for several.
+.TP
+.BI \-\-audit\-retention\-days= N
+How long the audit log is kept. Default: 90.
+.TP
+.BR \-\-ice\-server= \fIURL\fR | none
+A STUN or TURN server for low-latency (WebRTC) video:
+.BI stun: HOST\fR[\fB: PORT\fR]
+or
+.BI turn: USER : PASS @ HOST\fR[\fB: PORT\fR].
+Repeat it for several;
+.B none
+for none. Without this option an Owner sets the list under Admin \(-> Network,
+and it starts empty: on a LAN or VPN the server's own addresses are all a
+browser needs, and the server makes no connections out by itself.
+.TP
+.BR \-\-tls=on | off
+Fixes whether HTTPS is on. Without it, an Owner turns HTTPS on and off under
+Admin \(-> Network, and the server starts on plain HTTP.
+.RS
+.TP
+.B on
+HTTPS always. The plain HTTP port redirects to it, unless an Owner turned
+that off. The server won't start without a certificate: one in
+.IR /etc/houstonkvm/tls/ ,
+one named by
+.BR \-\-tls\-cert ,
+or one an Owner installed earlier.
+.TP
+.B off
+Plain HTTP only. Use it behind a reverse proxy that does TLS, and to get back
+in after an HTTPS mistake (see
+.BR RECOVERY ):
+it also turns off the Owner's HTTPS, which stays off without the option.
+.RE
+.TP
+.BI \-\-https\-port= N
+Fixes the HTTPS port. Without it, it is an Owner's setting, 8443 to start.
+.TP
+.BI \-\-tls\-cert= FILE " \-\-tls\-key=" FILE
+A certificate chain (PEM, the server's certificate first) and its private key
+(PEM, not encrypted) to serve, given together. Without them, the files in
+.I /etc/houstonkvm/tls/
+are used when both exist. Either way, an Owner can't replace this certificate
+in the web interface, and the server refuses to start when it can't be
+served. The key must be RSA of 2048 bits or more, or ECDSA P-256 or P-384.
+.TP
+.B \-\-version
+Prints the version and exits.
+.TP
+.B \-\-help
+Prints a summary of the options and exits.
+.SH HTTPS
+Turning HTTPS on in the web interface needs no restart and can't lock the
+Owner out: HTTPS starts beside plain HTTP, the browser is sent to the HTTPS
+address, and only a browser that gets there confirms the switch. Unconfirmed
+within two minutes, the server goes back to plain HTTP by itself and Admin
+says why. Usually the port is blocked; see
+.BR FIREWALL .
+.PP
+Under HTTPS everyone signs in once more: the session cookie becomes
+.BR __Host\-session ,
+and one that crossed the network in the clear isn't honoured.
+.PP
+An Owner gets a certificate in one of three ways under Admin \(-> Network:
+.IP \(bu 2
+From the organization's certificate authority: the server makes a key, which
+never leaves it, and a signing request (CSR); the Owner pastes back the signed
+certificate.
+.IP \(bu 2
+By uploading a certificate and its key, for example one the organization's CA
+issued elsewhere.
+.IP \(bu 2
+From HoustonKVM's own small certificate authority, made on first use (valid
+10 years). Trust its certificate once (any signed-in user can download it,
+for a browser, a GPO or Ansible), and the server certificates it issues
+renew themselves 30 days before they expire without anyone noticing.
+.PP
+TLS goes through the system's OpenSSL, so the system crypto policy
+.RB ( update\-crypto\-policies (8))
+decides protocol versions and ciphers; TLS 1.2 is the least it allows. Keys
+are made with OpenSSL's EVP interface, which works in FIPS mode.
+.SH RECOVERY
+If HTTPS was turned on and nobody can reach it (the certificate is refused,
+the port is closed), add
+.B \-\-tls=off
+to
+.B HOUSTONKVM_OPTS
+in
+.IR /etc/houstonkvm/houstonkvm.conf ,
+and run
+.BR "systemctl restart houstonkvm" .
+That turns HTTPS off, and it stays off once the option is removed again (and
+the service restarted), so an Owner can sign in over plain HTTP, fix things
+under Admin \(-> Network, and turn HTTPS on again there.
+.SH FIREWALL
+The package ships a firewalld service,
+.BR houstonkvm ,
+covering 8080/tcp (HTTP), 8443/tcp (HTTPS) and 50000\(en50100/udp (WebRTC
+video), and opens nothing by itself:
+.PP
+.RS
+.nf
+firewall\-cmd \-\-permanent \-\-add\-service=houstonkvm
+firewall\-cmd \-\-reload
+.fi
+.RE
+.PP
+With other ports, open those instead. If SELinux refuses a port, allow it with
+.BI "semanage port \-a \-t http_port_t \-p tcp " N\fR.
+.SH SIGNALS
+.TP
+.B SIGHUP
+Re-reads the certificate files: the configuration's, or the Owner's.
+New connections get the new certificate; open ones, with their video and
+control, carry on. A pair that doesn't load leaves the one in use in place,
+and the failure is logged and audited.
+.B systemctl reload houstonkvm
+sends it.
+.TP
+.BR SIGTERM ", " SIGINT
+Stop the server. Anyone driving a target is recorded in the audit log as
+stopped by the server.
+.SH FILES
+.TP
+.I /etc/houstonkvm/houstonkvm.conf
+The service's options, as
+.BR HOUSTONKVM_OPTS .
+.TP
+.I /etc/houstonkvm/tls/houstonkvm.crt
+.TQ
+.I /etc/houstonkvm/tls/houstonkvm.key
+A certificate managed by the configuration (Ansible, Puppet, certbot): the
+chain, and its key. The directory is root:houstonkvm, mode 0750; give the
+key the same owner and mode 0640.
+.TP
+.I /var/lib/houstonkvm/houstonkvm.db
+Accounts, sessions, targets, settings and the audit log.
+.TP
+.I /var/lib/houstonkvm/tls/
+Certificates managed in the web interface:
+.I cert.pem
+and
+.I key.pem
+in use,
+.I ca/
+for HoustonKVM's own certificate authority, and
+.I pending/
+for a key waiting for its signed certificate. Back up
+.I ca/
+to keep a trusted CA across a reinstall.
+.TP
+.I /usr/share/doc/houstonkvm/examples/
+An Ansible playbook for rolling out HTTPS, and certbot deploy hooks.
+.SH ENVIRONMENT
+.TP
+.B HOUSTONKVM_RTC_LOG
+libdatachannel's log level, such as
+.BR debug ,
+for troubleshooting low-latency video.
+.SH EXIT STATUS
+0 after a clean stop, 2 for a bad option or combination of options, 1 when
+the server can't start (a port is taken, the database can't be opened, or a
+certificate the configuration names can't be served).
+.SH SEE ALSO
+.BR firewall\-cmd (1),
+.BR systemctl (1),
+.BR update\-crypto\-policies (8),
+.BR semanage\-port (8)
+.PP
+The API: /usr/share/doc/houstonkvm/API.md.

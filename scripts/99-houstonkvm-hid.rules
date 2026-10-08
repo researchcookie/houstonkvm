@@ -1,0 +1,2 @@
+# Allow the 'input' group to access USB HID gadget endpoints.
+KERNEL=="hidg[0-9]*", SUBSYSTEM=="usb_gadget", GROUP="input", MODE="0660"

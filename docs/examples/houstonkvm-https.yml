@@ -1,0 +1,91 @@
+# Rolls HoustonKVM out with HTTPS fixed by configuration: the package, a
+# certificate from the company's CA, HTTPS pinned on, and the firewall open.
+# Admin -> Network then shows HTTPS and the certificate as set by the
+# server's configuration, and nobody can turn it off there.
+#
+#   ansible-playbook -i inventory houstonkvm-https.yml
+#
+# Each host needs its certificate chain (its own certificate first, then any
+# intermediates) and unencrypted key, named after the host:
+#   files/tls/kvm1.example.com.crt
+#   files/tls/kvm1.example.com.key   (vault-encrypt it: ansible-vault encrypt)
+#
+# Renewal: replace the two files and run this again. The certificate is
+# re-read with `systemctl reload`, so sessions carry on; only a change to
+# the options restarts the service.
+- name: HoustonKVM with HTTPS
+  hosts: houstonkvm
+  become: true
+  vars:
+    houstonkvm_http_port: 8080
+    houstonkvm_https_port: 8443
+    houstonkvm_opts: >-
+      --port={{ houstonkvm_http_port }}
+      --https-port={{ houstonkvm_https_port }}
+      --tls=on
+      --db=/var/lib/houstonkvm/houstonkvm.db
+
+  tasks:
+    - name: Install HoustonKVM
+      ansible.builtin.dnf:
+        name: houstonkvm
+        state: present
+
+    - name: Certificate chain
+      ansible.builtin.copy:
+        src: "files/tls/{{ inventory_hostname }}.crt"
+        dest: /etc/houstonkvm/tls/houstonkvm.crt
+        owner: root
+        group: houstonkvm
+        mode: "0640"
+      notify: Reload HoustonKVM
+
+    - name: Private key
+      ansible.builtin.copy:
+        src: "files/tls/{{ inventory_hostname }}.key"
+        dest: /etc/houstonkvm/tls/houstonkvm.key
+        owner: root
+        group: houstonkvm
+        mode: "0640"
+      no_log: true
+      notify: Reload HoustonKVM
+
+    - name: Options, with HTTPS pinned on
+      ansible.builtin.lineinfile:
+        path: /etc/houstonkvm/houstonkvm.conf
+        regexp: '^HOUSTONKVM_OPTS='
+        line: 'HOUSTONKVM_OPTS="{{ houstonkvm_opts }}"'
+      notify: Restart HoustonKVM
+
+    - name: Open the firewall (HTTP, which redirects; HTTPS; WebRTC video)
+      ansible.posix.firewalld:
+        service: houstonkvm
+        permanent: true
+        immediate: true
+        state: enabled
+
+    - name: Start HoustonKVM at boot
+      ansible.builtin.service:
+        name: houstonkvm
+        enabled: true
+        state: started
+
+  handlers:
+    # A restart reads the certificate too, so a reload after it is harmless.
+    - name: Restart HoustonKVM
+      ansible.builtin.service:
+        name: houstonkvm
+        state: restarted
+
+    - name: Reload HoustonKVM
+      ansible.builtin.service:
+        name: houstonkvm
+        state: reloaded
+
+  post_tasks:
+    - name: HTTPS answers with the certificate
+      ansible.builtin.uri:
+        url: "https://{{ inventory_hostname }}:{{ houstonkvm_https_port }}/api/status"
+        validate_certs: true
+      delegate_to: localhost
+      become: false

@@ -1,0 +1,101 @@
+/* The app shell: header and navigation, page frames, breadcrumbs, tabs. */
+.app { display: flex; flex-direction: column; height: 100vh; }
+.app-main { flex: 1; min-height: 0; overflow: auto; outline: none; }
+
+/* ── Header & nav ─────────────────────────────────────────────────────── */
+#app-header { flex-shrink: 0; background: var(--header-bg); border-bottom: 1px solid var(--header-rule); }
+.nav-container { display: flex; align-items: center; flex-wrap: wrap; padding: 0 1rem; }
+.navbar { display: flex; align-items: center; justify-content: space-between; flex: 1; padding: .65rem 0; }
+.brand {
+  color: var(--header-fg); font-family: var(--font-display); font-weight: 700; font-size: 1.4rem;
+  letter-spacing: -.01em; text-decoration: none;
+}
+.brand:hover { color: var(--header-fg); }
+.menu-btn {
+  background: none; border: 1px solid var(--header-muted); border-radius: var(--radius); color: var(--header-fg);
+  cursor: pointer; padding: .35rem .8rem; font-weight: 600; text-transform: uppercase; font-size: .8rem; letter-spacing: .08em;
+}
+.menu-btn:hover { border-color: var(--header-fg); }
+
+#primary-nav { display: none; }
+#primary-nav.is-open { display: flex; flex-direction: column; }
+.nav-close { display: none; }
+.nav-links, .nav-secondary-list { list-style: none; margin: 0; padding: 0; }
+.nav-links a {
+  display: block; color: var(--header-muted); font-weight: 600; text-transform: uppercase;
+  font-size: .82rem; letter-spacing: .12em; text-decoration: none; padding: .6rem 0;
+}
+.nav-links a:hover { color: var(--header-fg); }
+.nav-links a[aria-current="page"] { color: var(--header-fg); border-bottom: 2px solid var(--header-accent); }
+.nav-secondary-list { display: flex; align-items: center; gap: 1rem; }
+.role-badge {
+  border: 1px solid var(--header-muted); border-radius: 999px; color: var(--header-fg); text-transform: uppercase;
+  font-size: .75rem; font-weight: 700; letter-spacing: .08em; padding: .15rem .65rem;
+}
+body[data-session="owner"] .role-badge {
+  background: var(--header-fg); border-color: var(--header-fg); color: var(--header-bg);
+}
+.owner-rail {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .75rem;
+  background: var(--accent); color: var(--accent-ink); padding: .3rem 1rem; font-size: .85rem;
+}
+.owner-rail strong { text-transform: uppercase; letter-spacing: .1em; font-size: .75rem; }
+/* A phone has no room to spare: the label alone says it. */
+@media (max-width: 39.99em) { .owner-rail span { display: none; } }
+@media (min-width: 64em) { .owner-rail { padding: .3rem 1.5rem; } }
+#logout-btn {
+  background: none; border: 0; padding: 0; min-height: 24px; color: var(--header-fg); cursor: pointer;
+  font-weight: 600; text-transform: uppercase; font-size: .8rem; letter-spacing: .08em;
+  text-decoration: underline; text-underline-offset: .2em;
+}
+#logout-btn:hover { text-decoration-color: var(--header-accent); text-decoration-thickness: 2px; }
+
+/* Below the desktop breakpoint, #primary-nav becomes a slide-out panel that
+   the header's menu button opens (see router.js for the open/close logic). */
+@media (max-width: 63.99em) {
+  #primary-nav {
+    position: fixed; inset: 0 0 0 auto; width: 82%; max-width: 20rem; z-index: 100;
+    background: var(--header-bg); padding: 1rem; overflow-y: auto; box-shadow: var(--shadow-lift);
+  }
+  .nav-close {
+    display: block; margin-left: auto; background: none; cursor: pointer;
+    border: 1px solid var(--header-muted); border-radius: var(--radius); color: var(--header-fg);
+    padding: .3rem .7rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em;
+  }
+  .nav-links { margin-top: 1rem; }
+  .nav-secondary { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--header-rule); }
+  .nav-secondary-list { flex-direction: column; align-items: flex-start; gap: .75rem; }
+}
+@media (min-width: 64em) {
+  .menu-btn, .nav-close { display: none !important; }
+  .nav-container { padding: 0 1.5rem; }
+  .navbar { flex: none; }
+  #primary-nav { display: flex !important; flex-direction: row; align-items: center; flex: 1; justify-content: space-between; margin-left: 2.5rem; }
+  .nav-links { display: flex; flex-direction: row; gap: 1.75rem; }
+}
+
+/* ── Pages ────────────────────────────────────────────────────────────── */
+.page-inner { max-width: 74rem; margin: 0 auto; padding: 1.75rem 1rem 3rem; }
+.page-inner--narrow { max-width: 46rem; }
+.page-title { font-size: 2.4rem; font-weight: 700; margin: 0 0 .35rem; letter-spacing: -.015em; }
+.page-lede { color: var(--muted); font-size: 1.15rem; margin: 0 0 1.25rem; max-width: 40rem; }
+.panel { padding: .5rem 0 1rem; }
+.panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.panel-head .hint { max-width: 38rem; margin: 0; }
+
+/* ── Breadcrumb ───────────────────────────────────────────────────────── */
+.breadcrumb { padding: .35rem 0 0; }
+.breadcrumb-list { display: flex; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; font-size: .95rem; }
+.breadcrumb-item:not(:last-child)::after { content: "/"; margin: 0 .5rem; color: var(--muted); }
+.breadcrumb-link { color: var(--link); text-decoration: underline; }
+.breadcrumb-item[aria-current="page"] { color: var(--text); font-weight: 600; }
+
+/* ── Tabs ─────────────────────────────────────────────────────────────── */
+.app-tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--border-soft); margin: 1rem 0 1.25rem; flex-wrap: wrap; }
+.app-tab {
+  background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  padding: .65rem .9rem; font: inherit; font-size: .85rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--muted); cursor: pointer;
+}
+.app-tab:hover { color: var(--text); }
+.app-tab[aria-selected="true"] { color: var(--text); font-weight: 700; border-bottom-color: var(--accent-line); }

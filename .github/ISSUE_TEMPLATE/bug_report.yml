@@ -1,0 +1,51 @@
+name: Bug report
+description: Something doesn't work the way the README or API docs say it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For a security problem, please don't use this
+        form: see [SECURITY.md](https://github.com/researchcookie/houstonkvm/blob/main/SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `HoustonKVM --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How it's installed
+      options:
+        - RPM
+        - From source
+        - Other (say below)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and architecture
+      placeholder: CentOS Stream 9, x86-64
+    validations:
+      required: true
+  - type: input
+    id: deployment
+    attributes:
+      label: Deployment
+      description: Plain HTTP, built-in HTTPS, or behind a reverse proxy (which one)?
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server log
+      description: The relevant lines from `journalctl -u houstonkvm`, or the terminal it runs in.
+      render: text

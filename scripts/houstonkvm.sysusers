@@ -1,0 +1,5 @@
+u houstonkvm - "HoustonKVM service" /var/lib/houstonkvm -
+m houstonkvm input
+m houstonkvm video
+m houstonkvm dialout
+m houstonkvm audio

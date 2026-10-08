@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HoustonKVM</title>
+<!-- Our own icon (a monitor). Inline, so the browser never asks for /favicon.ico. -->
+<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%233a302a'/%3E%3Crect x='6' y='8' width='20' height='13' rx='2' fill='none' stroke='%23f7efe2' stroke-width='2'/%3E%3Cpath d='M12 25h8M16 21v4' stroke='%23cca586' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preload" href="/fonts/source-sans-3.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/playfair-display.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/layout.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/pages.css">
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
+<!-- ── Sign in / first-time setup (shown until authenticated) ───────────── -->
+<main id="auth-view" class="auth-view" tabindex="-1" hidden>
+  <div class="auth-card">
+    <h1 class="auth-title">HoustonKVM</h1>
+    <p class="auth-sub">Remote keyboard, video and mouse for your machines.</p>
+
+    <!-- Sign-in and first-time setup are alternatives (setup is only offered
+         while no account exists), so a heading is the honest control here. -->
+    <h2 class="auth-heading" id="auth-heading">Sign in</h2>
+
+    <!-- Landing on HTTPS after an Owner turned it on (see https.js). -->
+    <div class="alert alert-slim" id="auth-notice" role="status" hidden>
+      <p class="alert-text" id="auth-notice-text"></p>
+    </div>
+
+    <form id="form-login" class="form" aria-labelledby="auth-heading">
+      <label for="l-user">Username</label>
+      <input id="l-user" autocomplete="username" required>
+      <label for="l-pass">Password</label>
+      <input id="l-pass" type="password" autocomplete="current-password" required>
+      <button class="btn" type="submit">Sign in</button>
+      <div class="alert alert-error alert-slim" id="l-err-box" role="alert" hidden>
+        <p class="alert-text" id="l-err"></p>
+      </div>
+    </form>
+
+    <form id="form-setup" class="form" aria-labelledby="auth-heading" hidden>
+      <div class="alert alert-info alert-slim">
+        <p class="alert-text">No accounts exist yet. Create the first administrator (owner) account.</p>
+      </div>
+      <label for="s-code">Setup code</label>
+      <p class="hint" id="s-code-hint">Printed in the server's log when it starts: <code>journalctl -u houstonkvm</code></p>
+      <input id="s-code" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="s-code-hint" required>
+      <label for="s-user">Username</label>
+      <input id="s-user" autocomplete="username" required>
+      <label for="s-pass">Password</label>
+      <input id="s-pass" type="password" autocomplete="new-password" minlength="8" required>
+      <button class="btn" type="submit">Create account</button>
+      <div class="alert alert-error alert-slim" id="s-err-box" role="alert" hidden>
+        <p class="alert-text" id="s-err"></p>
+      </div>
+    </form>
+  </div>
+</main>
+
+<!-- ── The application ─────────────────────────────────────────────────── -->
+<div id="app" class="app" hidden>
+  <header id="app-header">
+    <!-- Shown only in an Owner's session: administering the server is a
+         different job from watching or driving a machine, and it should
+         never be mistaken for one. -->
+    <div class="owner-rail" id="owner-rail" hidden>
+      <strong>Owner session</strong>
+      <span>You are administering this server: its accounts, targets and wiring.</span>
+    </div>
+    <div class="nav-container">
+      <div class="navbar">
+        <a class="brand" href="#/targets" title="HoustonKVM home">HoustonKVM</a>
+        <button type="button" class="menu-btn" id="menu-btn" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+      </div>
+      <nav aria-label="Primary navigation" id="primary-nav">
+        <button type="button" class="nav-close" id="nav-close">Close</button>
+        <ul class="nav-links">
+          <li><a id="nav-targets" href="#/targets">Targets</a></li>
+          <li><a id="nav-settings" href="#/settings">Settings</a></li>
+          <li id="nav-admin-item" hidden><a id="nav-admin" href="#/admin">Admin</a></li>
+        </ul>
+        <div class="nav-secondary">
+          <ul class="nav-secondary-list">
+            <li><span id="role-badge" class="role-badge"></span></li>
+            <li><button type="button" id="logout-btn">Sign out</button></li>
+          </ul>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content" class="app-main" tabindex="-1">
+
+    <!-- ── Targets: the home page ───────────────────────────────────────── -->
+    <section class="page" id="page-targets" aria-labelledby="targets-title" hidden>
+      <div class="page-inner">
+        <h1 class="page-title" id="targets-title">Targets</h1>
+        <p class="page-lede">Choose a machine to view or control. Search by name, group or tag.</p>
+
+        <form class="search-form" role="search" id="targets-search-form">
+          <label class="sr-only" for="targets-search">Search targets</label>
+          <input id="targets-search" type="search" autocomplete="off"
+                 placeholder="Search by name, group or tag">
+          <button class="btn" type="submit">Search</button>
+        </form>
+
+        <div class="target-filters" id="targets-filters" hidden>
+          <div class="filter-group">
+            <label class="filter-label" for="targets-group">Group</label>
+            <select id="targets-group"><option value="">All groups</option></select>
+          </div>
+          <div class="filter-group filter-group--tags" id="targets-tags-wrap">
+            <span class="filter-label" id="targets-tags-label">Tags</span>
+            <div class="chip-row" id="targets-tags" role="group" aria-labelledby="targets-tags-label"></div>
+          </div>
+        </div>
+
+        <p class="target-count" id="targets-count" role="status" aria-live="polite"></p>
+        <div id="targets-results"></div>
+
+        <div class="empty-state" id="targets-empty" hidden>
+          <h2 class="empty-title" id="targets-empty-title"></h2>
+          <p id="targets-empty-text"></p>
+          <div class="empty-actions" id="targets-empty-actions"></div>
+        </div>
+        <div class="alert alert-error" id="targets-error" role="alert" hidden>
+          <p class="alert-text" id="targets-error-text"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── One target: the screen ───────────────────────────────────────── -->
+    <section class="page page--kvm" id="page-kvm" aria-labelledby="kvm-title" hidden>
+      <div class="kvm-head">
+        <nav class="breadcrumb" aria-label="Breadcrumbs">
+          <ol class="breadcrumb-list">
+            <li class="breadcrumb-item"><a class="breadcrumb-link" href="#/targets">Targets</a></li>
+            <li class="breadcrumb-item" id="crumb-group-item" hidden><a class="breadcrumb-link" href="#/targets" id="crumb-group"></a></li>
+            <li class="breadcrumb-item" aria-current="page"><span id="crumb-name"></span></li>
+          </ol>
+        </nav>
+        <div class="kvm-title-row">
+          <h1 class="kvm-title" id="kvm-title"></h1>
+          <span class="status-tag" id="kvm-status"></span>
+          <span id="ctrl-indicator" class="live-tag" hidden>&#x25CF; LIVE INPUT</span>
+        </div>
+      </div>
+
+      <div class="page-toolbar" role="toolbar" aria-label="Session controls">
+        <span id="ctrl-hint" class="hint-inline"></span>
+        <div class="page-toolbar-spacer"></div>
+        <!-- Sends the chosen key directly via /api/input instead of a real
+             keypress — some keys (F5/F11/F12, often F1) are intercepted by
+             the browser itself before any page's JS sees them, and no
+             amount of preventDefault() in input.js can override that. -->
+        <label class="sr-only" for="special-key-select">Send a special key</label>
+        <select class="toolbar-select" id="special-key-select" hidden>
+          <option value="" selected disabled>Send key&hellip;</option>
+          <option value="F1">F1</option>
+          <option value="F2">F2</option>
+          <option value="F3">F3</option>
+          <option value="F4">F4</option>
+          <option value="F5">F5</option>
+          <option value="F6">F6</option>
+          <option value="F7">F7</option>
+          <option value="F8">F8</option>
+          <option value="F9">F9</option>
+          <option value="F10">F10</option>
+          <option value="F11">F11</option>
+          <option value="F12">F12</option>
+          <option value="Escape">Esc</option>
+          <option value="__ctrlaltdel">Ctrl+Alt+Del</option>
+        </select>
+        <button type="button" class="btn btn-outline toolbar-btn" id="paste-btn"
+                aria-expanded="false" aria-controls="paste-panel" hidden>Paste text</button>
+        <button type="button" class="btn btn-outline toolbar-btn" id="health-btn"
+                aria-expanded="false" aria-controls="health-panel" hidden>Input health</button>
+        <button type="button" class="btn btn-outline toolbar-btn" id="display-btn"
+                aria-expanded="false" aria-controls="display-panel" hidden>Display</button>
+        <button type="button" class="btn btn-outline toolbar-btn" id="sound-btn" hidden>Unmute</button>
+        <button type="button" class="btn btn-outline toolbar-btn" id="webrtc-btn">Low-latency video</button>
+        <button type="button" class="btn toolbar-btn" id="ctrl-btn" hidden>Take control</button>
+      </div>
+
+      <!-- Display: this target's capture resolution and refresh rate (Operator and
+           Owner). Applies to everyone watching, so it's an explicit Apply. -->
+      <section class="display-panel" id="display-panel" aria-labelledby="display-title" hidden>
+        <form id="form-video" class="display-form">
+          <h2 class="display-title" id="display-title">Display</h2>
+          <div class="field">
+            <label for="vid-resolution">Resolution</label>
+            <select id="vid-resolution"></select>
+          </div>
+          <div class="field" id="vid-fps-field">
+            <label for="vid-fps-select">Refresh rate</label>
+            <select id="vid-fps-select"></select>
+          </div>
+          <div class="field-row" id="vid-custom-row" hidden>
+            <div class="field"><label for="vid-width">Width</label>
+              <input id="vid-width" type="number" min="1" max="7680"></div>
+            <div class="field"><label for="vid-height">Height</label>
+              <input id="vid-height" type="number" min="1" max="4320"></div>
+            <div class="field"><label for="vid-fps">Frames per second</label>
+              <input id="vid-fps" type="number" min="1" max="120"></div>
+          </div>
+          <div class="field">
+            <label for="vid-bitrate">Low-latency bitrate (kbps)</label>
+            <input id="vid-bitrate" type="number" min="1" max="100000" required>
+          </div>
+          <button class="btn" type="submit" id="vid-apply">Apply</button>
+          <div class="display-notes">
+            <p class="hint-compact" id="vid-active"></p>
+            <p class="hint-compact" id="vid-caps-err"></p>
+            <div class="form-msg" id="vid-msg" role="status"></div>
+          </div>
+        </form>
+      </section>
+
+      <!-- Paste text: the server types it on the target one key at a time, paced
+           for the keyboard link, so it works where there's no clipboard to share
+           (a BIOS screen, a login prompt, an installer). Only while driving. -->
+      <section class="display-panel" id="paste-panel" aria-labelledby="paste-title" hidden>
+        <form id="form-paste" class="paste-form">
+          <h2 class="display-title" id="paste-title">Paste text</h2>
+          <label for="paste-text">Text to type on this machine</label>
+          <textarea id="paste-text" rows="5" spellcheck="false" autocomplete="off"></textarea>
+          <p class="hint-compact">Typed as on a US keyboard: plain ASCII letters, digits and symbols,
+            newlines and tabs. Click where it should go on the machine's screen first.</p>
+          <div class="form-actions">
+            <button class="btn" type="submit" id="paste-type">Type it</button>
+            <button class="btn btn-outline" type="button" id="paste-stop" hidden>Stop typing</button>
+          </div>
+          <div class="form-msg" id="paste-msg" role="status"></div>
+        </form>
+      </section>
+
+      <!-- Input health: whether the keyboard/mouse link works, and if not, which
+           cable to look at. Everyone can read it; only an Owner runs the test. -->
+      <section class="display-panel" id="health-panel" aria-labelledby="health-title" hidden>
+        <h2 class="display-title" id="health-title">Input health</h2>
+        <p class="health-summary" id="health-summary"></p>
+        <dl class="health-facts" id="health-facts"></dl>
+        <div class="health-test" id="health-test-area" hidden>
+          <button class="btn btn-outline" type="button" id="health-test-btn">Run input test</button>
+          <p class="hint-compact">Sends 20 status checks to the adapter and reads its settings.
+            Nothing is typed or clicked on the target, and nobody can take control
+            during the few seconds it runs.</p>
+          <p class="health-test-result" id="health-test-result" role="status"></p>
+        </div>
+        <div class="health-test" id="health-baud-area" hidden>
+          <button class="btn btn-outline" type="button" id="health-baud-btn">Switch to 115200 baud</button>
+          <p class="hint-compact" id="health-baud-hint">Each key press and mouse move crosses the serial link 12 times faster. This rewrites
+            the adapter's stored speed and may reset it, so keys and buttons are released
+            and nobody can take control for the few seconds it takes. If the adapter can't
+            switch, it's left as it was.</p>
+          <p class="health-test-result" id="health-baud-result" role="status"></p>
+        </div>
+        <div class="form-msg" id="health-msg" role="status"></div>
+      </section>
+
+      <div class="kvm-viewport" id="kvm-viewport">
+        <img id="kvm" alt="Live screen of the selected target">
+        <video id="kvm-webrtc" autoplay playsinline muted hidden></video>
+        <div id="video-status" class="video-status" role="status" hidden></div>
+      </div>
+    </section>
+
+    <!-- ── Settings ─────────────────────────────────────────────────────── -->
+    <section class="page" id="page-settings" aria-labelledby="settings-title" hidden>
+      <div class="page-inner page-inner--narrow">
+        <h1 class="page-title" id="settings-title">Settings</h1>
+        <div class="app-tabs" role="tablist" id="settings-tabs" aria-label="Settings sections">
+          <button type="button" role="tab" class="app-tab" id="stab-account" aria-selected="true" aria-controls="spanel-account">Account</button>
+          <button type="button" role="tab" class="app-tab" id="stab-preferences" aria-selected="false" aria-controls="spanel-preferences">Preferences</button>
+          <button type="button" role="tab" class="app-tab" id="stab-bots" aria-selected="false" aria-controls="spanel-bots">API tokens</button>
+        </div>
+
+        <!-- Account -->
+        <div class="panel" id="spanel-account" role="tabpanel" aria-labelledby="stab-account">
+          <form id="form-password" class="form">
+            <label for="pw-current">Current password</label>
+            <input id="pw-current" type="password" autocomplete="current-password" required>
+            <label for="pw-new">New password</label>
+            <input id="pw-new" type="password" autocomplete="new-password" required>
+            <button class="btn" type="submit">Change password</button>
+            <div class="form-msg" id="pw-msg" role="status"></div>
+          </form>
+        </div>
+
+        <!-- Preferences -->
+        <div class="panel" id="spanel-preferences" role="tabpanel" aria-labelledby="stab-preferences" hidden>
+          <form id="form-preferences" class="form">
+            <label for="pref-stream-mode">Default stream mode</label>
+            <select id="pref-stream-mode">
+              <option value="mjpeg">MJPEG (always available)</option>
+              <option value="webrtc">Low-latency (WebRTC)</option>
+            </select>
+            <label for="pref-bitrate">Preferred WebRTC bitrate (kbps)</label>
+            <span class="hint" id="pref-bitrate-hint">Stored for a future per-viewer bitrate feature &mdash; the server
+              currently encodes one shared stream per target at a fixed bitrate, so this isn't applied yet.</span>
+            <input id="pref-bitrate" type="number" min="500" max="20000" step="100"
+                   placeholder="server default" aria-describedby="pref-bitrate-hint">
+            <button class="btn" type="submit">Save preferences</button>
+            <div class="form-msg" id="pref-msg" role="status"></div>
+          </form>
+        </div>
+
+        <!-- API tokens -->
+        <div class="panel" id="spanel-bots" role="tabpanel" aria-labelledby="stab-bots" hidden>
+          <p class="hint">Automated clients authenticate with an API token instead of a browser session &mdash;
+            send <code>Authorization: Bearer &lt;token&gt;</code>. Use <code>GET /api/targets</code> to discover
+            targets and <code>/api/targets/&lt;id&gt;/…</code> to act on one. Give each client only what it
+            needs: a token that only looks can't drive a target or change anything, and every token
+            should expire unless you have a reason.</p>
+          <ul class="row-list" id="token-list"></ul>
+          <div id="token-reveal-wrap"></div>
+          <form id="form-token" class="form">
+            <label for="token-label">Label</label>
+            <input id="token-label" placeholder="e.g. home-automation">
+            <label for="token-scope">Can</label>
+            <select id="token-scope">
+              <option value="full">Everything my account can do</option>
+              <option value="read">Only look: watch and read status</option>
+              <option value="metrics" id="token-scope-metrics" hidden>Only read /metrics (for Prometheus)</option>
+            </select>
+            <label for="token-expiry">Expires</label>
+            <select id="token-expiry">
+              <option value="30">In 30 days</option>
+              <option value="90" selected>In 90 days</option>
+              <option value="365">In a year</option>
+              <option value="never">Never</option>
+            </select>
+            <button class="btn" type="submit">Create token</button>
+            <div class="form-msg" id="token-msg" role="status"></div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Admin (owner only) ───────────────────────────────────────────── -->
+    <section class="page" id="page-admin" aria-labelledby="admin-title" hidden>
+      <div class="page-inner">
+        <h1 class="page-title" id="admin-title">Admin</h1>
+        <div class="alert alert-warning alert-slim admin-banner" id="https-banner" hidden>
+          <p class="alert-text"><span id="https-banner-text"></span>
+            <a href="#/admin" id="https-banner-link">Network → HTTPS</a></p>
+        </div>
+        <div class="app-tabs" role="tablist" id="admin-tabs" aria-label="Admin sections">
+          <button type="button" role="tab" class="app-tab" id="atab-targets" aria-selected="true" aria-controls="apanel-targets">Targets</button>
+          <button type="button" role="tab" class="app-tab" id="atab-users" aria-selected="false" aria-controls="apanel-users">Users</button>
+          <button type="button" role="tab" class="app-tab" id="atab-network" aria-selected="false" aria-controls="apanel-network">Network</button>
+          <button type="button" role="tab" class="app-tab" id="atab-audit" aria-selected="false" aria-controls="apanel-audit">Audit</button>
+        </div>
+
+        <!-- Targets: list -->
+        <div class="panel" id="apanel-targets" role="tabpanel" aria-labelledby="atab-targets">
+          <div id="admin-targets-list">
+            <div class="panel-head">
+              <p class="hint">Each target is one machine you can view and control. Give it a clear name,
+                put it in a group, and add tags &mdash; that's what people will search by.</p>
+              <button type="button" class="btn" id="target-add-btn">Add target</button>
+            </div>
+            <div class="form-msg" id="admin-targets-msg" role="status"></div>
+            <div class="alert alert-error alert-slim" id="admin-targets-err-box" role="alert" hidden>
+              <p class="alert-text" id="admin-targets-err"></p>
+            </div>
+            <div class="table-wrap">
+              <table class="target-table">
+                <caption class="sr-only">Configured targets</caption>
+                <thead><tr>
+                  <th scope="col">Name</th><th scope="col">Group</th><th scope="col">Tags</th>
+                  <th scope="col">State</th><th scope="col"><span class="sr-only">Actions</span></th>
+                </tr></thead>
+                <tbody id="admin-targets-body"></tbody>
+              </table>
+            </div>
+            <div class="empty-state empty-state--inline" id="admin-targets-empty" hidden>
+              <h2 class="empty-title">No targets yet</h2>
+              <p>Add your first target to start viewing and controlling a machine.</p>
+            </div>
+          </div>
+
+          <!-- Targets: editor -->
+          <form id="form-target" class="form form-wide" hidden>
+            <h2 class="form-title" id="target-form-title">Add target</h2>
+
+            <fieldset>
+              <legend>About this machine</legend>
+              <label for="t-name">Name</label>
+              <span class="hint" id="t-name-hint">What people will call it, e.g. "Web server 1". Must be unique.</span>
+              <input id="t-name" maxlength="64" required aria-describedby="t-name-hint" autocomplete="off">
+
+              <label for="t-desc">Description <span class="hint-inline">(optional)</span></label>
+              <input id="t-desc" maxlength="512" autocomplete="off">
+
+              <label for="t-group">Group <span class="hint-inline">(optional)</span></label>
+              <span class="hint" id="t-group-hint">A room, rack or team. Reuses the spelling of an existing group.</span>
+              <input id="t-group" list="dl-groups" maxlength="64" autocomplete="off" aria-describedby="t-group-hint">
+              <datalist id="dl-groups"></datalist>
+
+              <label for="t-tags">Tags <span class="hint-inline">(optional)</span></label>
+              <span class="hint" id="t-tags-hint">Comma-separated, e.g. <code>prod, linux</code>. Letters, digits and . _ : / - only.</span>
+              <input id="t-tags" autocomplete="off" aria-describedby="t-tags-hint t-tags-suggest">
+              <div class="chip-row chip-row--suggest" id="t-tags-suggest" aria-label="Existing tags — click to add"></div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Video</legend>
+              <label for="t-video">Capture device</label>
+              <select id="t-video"></select>
+              <div id="t-video-custom-row" hidden>
+                <label for="t-video-custom">Device path</label>
+                <input id="t-video-custom" placeholder="/dev/video0" autocomplete="off">
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="t-resolution">Resolution</label>
+                  <select id="t-resolution"></select>
+                </div>
+                <div class="field" id="t-fps-field">
+                  <label for="t-fps-select">Refresh rate</label>
+                  <select id="t-fps-select"></select>
+                </div>
+              </div>
+              <div class="field-row" id="t-custom-row" hidden>
+                <div class="field"><label for="t-width">Width</label>
+                  <input id="t-width" type="number" min="1" max="7680"></div>
+                <div class="field"><label for="t-height">Height</label>
+                  <input id="t-height" type="number" min="1" max="4320"></div>
+                <div class="field"><label for="t-fps">FPS</label>
+                  <input id="t-fps" type="number" min="1" max="120"></div>
+              </div>
+              <p class="hint hint-compact" id="t-caps-err"></p>
+              <label for="t-bitrate">WebRTC bitrate (kbps)</label>
+              <input id="t-bitrate" type="number" min="1" max="100000" required>
+            </fieldset>
+
+            <fieldset>
+              <legend>Sound</legend>
+              <label for="t-audio">Sound from</label>
+              <select id="t-audio"></select>
+              <p class="hint hint-compact" id="t-audio-hint">Most HDMI capture dongles carry the machine's sound
+                too. Viewers hear it with low-latency video, once they turn sound on.</p>
+            </fieldset>
+
+            <fieldset>
+              <legend>How keyboard and mouse reach it</legend>
+              <div class="radio-row">
+                <input type="radio" id="t-in-serial" name="t-input" value="serial">
+                <label for="t-in-serial">CH9329 USB-serial adapter</label>
+              </div>
+              <div class="radio-row">
+                <input type="radio" id="t-in-qemu" name="t-input" value="qemu">
+                <label for="t-in-qemu">QEMU virtual machine</label>
+              </div>
+              <div class="radio-row">
+                <input type="radio" id="t-in-gadget" name="t-input" value="gadget">
+                <label for="t-in-gadget">This computer's USB gadget port</label>
+              </div>
+
+              <div id="t-serial-fields">
+                <label for="t-serial">Serial device</label>
+                <select id="t-serial"></select>
+                <div id="t-serial-custom-row" hidden>
+                  <label for="t-serial-custom">Device path</label>
+                  <input id="t-serial-custom" placeholder="/dev/ttyUSB0" autocomplete="off">
+                </div>
+                <label for="t-baud">Baud rate</label>
+                <select id="t-baud"></select>
+              </div>
+              <div id="t-qemu-fields" hidden>
+                <label for="t-qmp">QEMU QMP socket</label>
+                <input id="t-qmp" placeholder="/var/run/qemu/qmp.sock" autocomplete="off">
+              </div>
+              <p class="hint" id="t-gadget-note" hidden>Only one target can use this computer's own USB gadget port.
+                Every other target needs a CH9329 adapter or a QEMU socket.</p>
+            </fieldset>
+
+            <fieldset>
+              <legend>Availability</legend>
+              <div class="checkbox-row">
+                <input id="t-enabled" type="checkbox" checked>
+                <label for="t-enabled">Enabled
+                  <span class="field-desc">Disabled targets stay in the list but don't capture video or accept input.</span></label>
+              </div>
+              <div class="checkbox-row">
+                <input id="t-default" type="checkbox">
+                <label for="t-default">Make this the default target
+                  <span class="field-desc">What automated clients get when they don't name a target. Change it deliberately — they will start driving this machine.</span></label>
+              </div>
+            </fieldset>
+
+            <div class="alert alert-error alert-slim" id="t-err-box" role="alert" hidden>
+              <p class="alert-text" id="t-err"></p>
+            </div>
+            <div class="form-actions">
+              <button class="btn" type="submit" id="t-save">Save target</button>
+              <button class="btn btn-outline" type="button" id="t-cancel">Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Users -->
+        <div class="panel" id="apanel-users" role="tabpanel" aria-labelledby="atab-users" hidden>
+          <ul class="row-list" id="user-list"></ul>
+          <form id="form-user" class="form">
+            <h2 class="form-title">Add a user</h2>
+            <label for="user-new-name">Username</label>
+            <input id="user-new-name" autocomplete="off" required>
+            <label for="user-new-pass">Password</label>
+            <input id="user-new-pass" type="password" autocomplete="new-password" required>
+            <label for="user-new-role">Role</label>
+            <select id="user-new-role">
+              <option value="viewer">Viewer &mdash; can watch</option>
+              <option value="operator">Operator &mdash; can watch and control</option>
+              <option value="owner">Owner &mdash; can administer</option>
+            </select>
+            <button class="btn" type="submit">Add user</button>
+            <div class="form-msg" id="user-msg" role="status"></div>
+          </form>
+        </div>
+
+        <!-- Network: HTTPS in the order an Owner does it (1 a certificate,
+             2 turn it on), then STUN/TURN servers for low-latency video -->
+        <div class="panel" id="apanel-network" role="tabpanel" aria-labelledby="atab-network" hidden>
+          <section class="net-section" aria-labelledby="https-title">
+            <h2 class="form-title" id="https-title">HTTPS</h2>
+            <dl class="facts" id="https-status"></dl>
+            <div class="alert alert-info alert-slim" id="https-pinned" hidden>
+              <p class="alert-text" id="https-pinned-text"></p>
+            </div>
+            <div class="form-msg" id="https-msg" role="status"></div>
+
+            <section class="step" id="https-cert-tools" aria-labelledby="https-step-cert">
+              <h3 class="step-title" id="https-step-cert"><span class="step-num" aria-hidden="true">1</span>Certificate</h3>
+              <fieldset class="choice-group">
+                <legend>Where does this server's certificate come from?</legend>
+                <div class="choice">
+                  <input type="radio" name="https-source" id="https-source-org" value="org">
+                  <label for="https-source-org">Your organization's certificate authority
+                    <span class="hint">For companies and government. Browsers that already trust your CA trust
+                      this server too, with nothing to install on them.</span></label>
+                </div>
+                <div class="choice">
+                  <input type="radio" name="https-source" id="https-source-own" value="own">
+                  <label for="https-source-own">HoustonKVM's own certificate authority
+                    <span class="hint">No CA of your own: one click, then trust HoustonKVM's CA once on each
+                      computer. Its certificates renew themselves.</span></label>
+                </div>
+              </fieldset>
+
+              <div class="route" id="https-route-org" hidden>
+                <h4 class="route-title">Make a signing request</h4>
+                <p class="hint">The key is made here and never leaves this server. Give the request (CSR) to your
+                  certificate authority, then paste the certificate it sends back.</p>
+                <form id="form-https-csr" class="form">
+                  <label for="https-csr-names">Names and addresses</label>
+                  <span class="hint" id="https-csr-names-hint">One per line: what people type to reach this
+                    server. The first is the common name.</span>
+                  <textarea id="https-csr-names" rows="4" spellcheck="false" required
+                            aria-describedby="https-csr-names-hint"></textarea>
+                  <label for="https-csr-key">Key type</label>
+                  <select id="https-csr-key">
+                    <option value="ecdsa-p256">ECDSA P-256</option>
+                    <option value="ecdsa-p384">ECDSA P-384</option>
+                    <option value="rsa-3072">RSA 3072</option>
+                  </select>
+                  <label for="https-csr-org">Organization <span class="hint-inline">(optional)</span></label>
+                  <input id="https-csr-org" autocomplete="off">
+                  <label for="https-csr-unit">Organizational unit <span class="hint-inline">(optional)</span></label>
+                  <input id="https-csr-unit" autocomplete="off">
+                  <label for="https-csr-country">Country <span class="hint-inline">(optional, two letters)</span></label>
+                  <input id="https-csr-country" autocomplete="off" maxlength="2" pattern="[A-Za-z]{2}">
+                  <button class="btn" type="submit">Make signing request</button>
+                </form>
+                <div id="https-csr-pending" hidden>
+                  <label for="https-csr-text">Signing request</label>
+                  <textarea id="https-csr-text" rows="6" readonly spellcheck="false"></textarea>
+                  <div class="btn-row">
+                    <a class="btn btn-outline btn-sm" href="/api/tls/csr" download="houstonkvm.csr">Download</a>
+                    <button type="button" class="btn btn-outline btn-sm" id="https-csr-discard">Discard</button>
+                  </div>
+                  <form id="form-https-signed" class="form">
+                    <label for="https-signed">Certificate from your certificate authority</label>
+                    <span class="hint" id="https-signed-hint">PEM text: this server's certificate, then any
+                      intermediate certificates.</span>
+                    <textarea id="https-signed" rows="6" spellcheck="false" required
+                              aria-describedby="https-signed-hint"></textarea>
+                    <button class="btn" type="submit">Install certificate</button>
+                  </form>
+                </div>
+
+                <details class="https-more" id="https-upload">
+                  <summary>Or upload a certificate and key made elsewhere</summary>
+                  <div class="alert alert-warning alert-slim" id="https-upload-warning" hidden>
+                    <p class="alert-text">This page is on plain HTTP, so the key would cross the network
+                      unencrypted. A signing request is safer: that key never leaves the server.</p>
+                  </div>
+                  <form id="form-https-upload" class="form">
+                    <label for="https-up-cert">Certificate</label>
+                    <span class="hint" id="https-up-cert-hint">PEM text: this server's certificate, then any
+                      intermediate certificates.</span>
+                    <textarea id="https-up-cert" rows="6" spellcheck="false" required
+                              aria-describedby="https-up-cert-hint"></textarea>
+                    <label for="https-up-key">Private key</label>
+                    <span class="hint" id="https-up-key-hint">PEM text, without a passphrase.</span>
+                    <textarea id="https-up-key" rows="6" spellcheck="false" required
+                              aria-describedby="https-up-key-hint"></textarea>
+                    <button class="btn" type="submit">Install certificate</button>
+                  </form>
+                </details>
+              </div>
+
+              <div class="route" id="https-route-own" hidden>
+                <div class="btn-row">
+                  <button type="button" class="btn" id="https-generate">Make a certificate</button>
+                  <a class="btn btn-outline" id="https-ca-download" href="/api/tls/ca.crt" download="houstonkvm-ca.crt"
+                     hidden>Download HoustonKVM's CA certificate</a>
+                </div>
+                <details class="https-more" id="https-generate-options">
+                  <summary>Names and key type</summary>
+                  <label for="https-gen-names">Names and addresses</label>
+                  <span class="hint" id="https-gen-names-hint">One per line: what people type to reach this
+                    server. Filled in with this machine's names and addresses.</span>
+                  <textarea id="https-gen-names" rows="5" spellcheck="false" aria-describedby="https-gen-names-hint"></textarea>
+                  <label for="https-gen-key">Key type</label>
+                  <select id="https-gen-key">
+                    <option value="ecdsa-p256">ECDSA P-256 (recommended)</option>
+                    <option value="ecdsa-p384">ECDSA P-384</option>
+                    <option value="rsa-3072">RSA 3072</option>
+                  </select>
+                </details>
+                <details class="https-more" id="https-trust-help">
+                  <summary>How to trust HoustonKVM's CA</summary>
+                  <p class="hint">Do this before turning HTTPS on: a browser that doesn't trust the CA shows a
+                    warning instead of the page.</p>
+                  <ul class="trust-list">
+                    <li><strong>Mac (Safari, Chrome):</strong> open the downloaded file, add it to the
+                      <em>System</em> keychain, then open it in Keychain Access and set <em>Trust → When using this
+                      certificate</em> to <em>Always Trust</em>. Quit and reopen the browser.</li>
+                    <li><strong>Windows (Edge, Chrome):</strong> open the file, <em>Install Certificate</em>,
+                      <em>Local Machine</em>, then <em>Trusted Root Certification Authorities</em>.</li>
+                    <li><strong>Firefox:</strong> Settings → Privacy &amp; Security → View Certificates →
+                      Authorities → Import, and tick <em>trust this CA to identify websites</em>.</li>
+                    <li><strong>Linux:</strong> copy it to <code>/etc/pki/ca-trust/source/anchors/</code> and run
+                      <code>update-ca-trust</code> (or <code>/usr/local/share/ca-certificates/</code> and
+                      <code>update-ca-certificates</code>).</li>
+                    <li><strong>Many computers:</strong> push it as a trusted root by Group Policy, Ansible or
+                      your MDM.</li>
+                  </ul>
+                </details>
+              </div>
+            </section>
+
+            <section class="step" id="https-switch" aria-labelledby="https-step-switch">
+              <h3 class="step-title" id="https-step-switch"><span class="step-num" aria-hidden="true">2</span>Turn on HTTPS</h3>
+              <label for="https-port">HTTPS port</label>
+              <span class="hint" id="https-port-hint">If this server runs a firewall, open the port as root:
+                <code id="https-port-cmd"></code></span>
+              <input id="https-port" type="number" min="1" max="65535" required aria-describedby="https-port-hint">
+              <div class="btn-row">
+                <button type="button" class="btn" id="https-enable">Turn on HTTPS</button>
+                <button type="button" class="btn btn-outline" id="https-port-save" hidden>Change port</button>
+                <button type="button" class="btn btn-outline" id="https-disable" hidden>Turn off HTTPS</button>
+              </div>
+              <span class="hint" id="https-switch-hint">Your browser moves to the HTTPS address, which
+                confirms it works. If it doesn't get there within 2 minutes (a certificate the browser refuses,
+                or a blocked port), the server goes back to plain HTTP by itself.</span>
+            </section>
+
+            <details class="https-more step-more" id="https-advanced">
+              <summary>Advanced</summary>
+              <form id="form-https-settings" class="form">
+                <div class="checkbox-row">
+                  <input type="checkbox" id="https-redirect">
+                  <label for="https-redirect">Once HTTPS is on, send plain-HTTP visitors to HTTPS
+                    <span class="hint">Off: nothing answers on the HTTP port at all.</span></label>
+                </div>
+                <div class="checkbox-row" id="https-auto-renew-row">
+                  <input type="checkbox" id="https-auto-renew">
+                  <label for="https-auto-renew">Renew HoustonKVM's own certificates by themselves
+                    <span class="hint">30 days before they expire. Nobody who trusts its CA notices.</span></label>
+                </div>
+                <div class="checkbox-row">
+                  <input type="checkbox" id="https-hsts" aria-describedby="https-hsts-hint">
+                  <label for="https-hsts">Tell browsers to always use HTTPS (HSTS)
+                    <span class="hint" id="https-hsts-hint">Browsers then refuse plain HTTP here, and lose their
+                      "proceed anyway" button: a later certificate mistake locks everyone out until it's fixed.
+                      Only with HTTPS on and a certificate from a certificate authority.</span></label>
+                </div>
+                <button class="btn" type="submit">Save settings</button>
+              </form>
+            </details>
+          </section>
+
+          <section class="net-section" aria-labelledby="ice-title">
+            <h2 class="form-title" id="ice-title">Video connections: STUN and TURN</h2>
+            <p class="hint">Not needed on a LAN or over a VPN, and then nothing contacts a server outside your
+              network. Add one only if viewers reach this server through NAT.</p>
+            <details class="https-more">
+              <summary>More about STUN and TURN</summary>
+              <p class="hint">Low-latency video uses them, both on this server and in every viewer's browser.
+                Without any, browsers connect to this server's own addresses. If a server listed here doesn't
+                answer, low-latency video goes ahead without it after a couple of seconds, which works on a LAN;
+                the server's log says when that happens.</p>
+            </details>
+            <div class="alert alert-info alert-slim" id="ice-managed" hidden>
+              <p class="alert-text">Set in the server's configuration (<code>--ice-server</code> in
+                /etc/houstonkvm/houstonkvm.conf), so they can't be changed here.</p>
+            </div>
+            <ul class="row-list" id="ice-list" aria-labelledby="ice-title"></ul>
+            <p class="hint" id="ice-empty" hidden>None. Low-latency video uses this server's own addresses only.</p>
+            <div class="form-msg" id="ice-msg" role="status"></div>
+            <form id="form-ice" class="form" hidden>
+              <h3 class="form-title form-title--sub">Add a server</h3>
+              <label for="ice-url">Address</label>
+              <span class="hint" id="ice-url-hint">stun:HOST[:PORT], turn:HOST[:PORT] or turns:HOST[:PORT].
+                A TURN address may end in ?transport=tcp.</span>
+              <input id="ice-url" required autocomplete="off" spellcheck="false" aria-describedby="ice-url-hint">
+              <div id="ice-login" hidden>
+                <label for="ice-username">Username</label>
+                <input id="ice-username" autocomplete="off" spellcheck="false">
+                <label for="ice-credential">Password</label>
+                <span class="hint" id="ice-credential-hint">Sent to every viewer's browser, which needs it to use
+                  the TURN server: use credentials meant for that, not an account's password.</span>
+                <input id="ice-credential" type="password" autocomplete="new-password"
+                       aria-describedby="ice-credential-hint">
+              </div>
+              <button class="btn" type="submit">Add server</button>
+            </form>
+          </section>
+        </div>
+
+        <!-- Audit: what happened, and who drove which target -->
+        <div class="panel" id="apanel-audit" role="tabpanel" aria-labelledby="atab-audit" hidden>
+          <p class="hint">What happened on this server: sign-ins, changes to accounts, tokens and targets,
+            and every time someone drove a target. What they typed is never recorded, only how much.</p>
+          <div class="alert alert-error alert-slim" id="audit-err-box" role="alert" hidden>
+            <p class="alert-text" id="audit-err"></p>
+          </div>
+
+          <h2 class="form-title" id="audit-events-title">Activity</h2>
+          <div class="filter-group">
+            <label class="filter-label" for="audit-kind">Show</label>
+            <select id="audit-kind">
+              <option value="">Everything</option>
+              <option value="auth.">Sign-ins and passwords</option>
+              <option value="user.">Accounts</option>
+              <option value="token.">API tokens</option>
+              <option value="target.">Targets</option>
+              <option value="server.">Server settings</option>
+              <option value="tls.">HTTPS</option>
+              <option value="control.">Control</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table class="target-table audit-table" aria-labelledby="audit-events-title">
+              <thead><tr>
+                <th scope="col">When</th><th scope="col">Who</th><th scope="col">What</th>
+                <th scope="col">Target</th><th scope="col">Details</th>
+              </tr></thead>
+              <tbody id="audit-events-body"></tbody>
+            </table>
+          </div>
+          <p class="hint" id="audit-events-empty" hidden>Nothing recorded yet.</p>
+          <button type="button" class="btn btn-outline btn-sm" id="audit-events-more" hidden>Show older</button>
+
+          <h2 class="form-title" id="audit-sessions-title">Control sessions</h2>
+          <div class="table-wrap">
+            <table class="target-table audit-table" aria-labelledby="audit-sessions-title">
+              <thead><tr>
+                <th scope="col">Started</th><th scope="col">Driver</th><th scope="col">Target</th>
+                <th scope="col">Length</th><th scope="col">Key presses</th><th scope="col">Mouse</th>
+                <th scope="col">Ended</th>
+              </tr></thead>
+              <tbody id="audit-sessions-body"></tbody>
+            </table>
+          </div>
+          <p class="hint" id="audit-sessions-empty" hidden>Nobody has driven a target yet.</p>
+          <button type="button" class="btn btn-outline btn-sm" id="audit-sessions-more" hidden>Show older</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="/js/util.js"></script>
+<script src="/js/router.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/targets.js"></script>
+<script src="/js/kvm.js"></script>
+<script src="/js/input.js"></script>
+<script src="/js/webrtc.js"></script>
+<script src="/js/widgets.js"></script>
+<script src="/js/display.js"></script>
+<script src="/js/health.js"></script>
+<script src="/js/paste.js"></script>
+<script src="/js/settings.js"></script>
+<script src="/js/admin.js"></script>
+<script src="/js/https.js"></script>
+<script src="/js/audit.js"></script>
+<script src="/js/start.js"></script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+/* HoustonKVM design tokens — the only file that names a colour, a font or a
+   radius. Everything else reads these custom properties, so a palette change
+   is a change here and nowhere else.
+
+   "Coastal townhome": one warm light theme, no dark mode. The six named
+   colours are the palette as given; the rest are derived from them where the
+   palette is too pale to carry text or a line on its own (every text pairing
+   is at least WCAG AA 4.5:1 on the surfaces it sits on, and every line that
+   has to be seen — focus ring, selected tab, status dot — at least 3:1).
+
+   Stylesheets load in this order (see index.html):
+     tokens.css      → colours, type, shape
+     base.css        → fonts, reset, typography, accessibility helpers
+     layout.css      → app shell: header, navigation, pages, tabs
+     components.css  → buttons, tags, alerts, forms, chips, cards, tables
+     pages.css       → things only one screen has (sign-in, targets, KVM, admin) */
+
+:root {
+  /* The palette */
+  --seashells: #f7efe2;
+  --sea-breeze: #e5edf0;
+  --waves-crashing: #9fadb6;
+  --sunkissed-sand: #ddcdbd;
+  --caramel-latte: #cca586;
+  --taupe: #a49284;
+
+  /* Derived from it */
+  --cream: #fcf8f2;          /* seashells, lifted: cards and raised panels */
+  --espresso: #3a302a;       /* taupe, darkened: text */
+  --mocha: #5a4a40;          /* espresso, softened: primary buttons */
+  --driftwood: #6b5d52;      /* taupe, darkened less: secondary text */
+  --pebble: #8c7b6d;         /* taupe, darkened just enough to edge a control */
+  --blush: #e9d3c8;          /* sand, pinked: the Owner header */
+  --slate: #40525e;          /* waves crashing, darkened: links */
+  --toasted-caramel: #9a6a45;/* caramel latte, darkened: lines that must show */
+  --terracotta: #9a4e3b;     /* danger */
+  --sage: #52705a;           /* live / success */
+  --honey: #80622c;          /* no signal / warning */
+
+  /* Roles */
+  --bg: var(--seashells);
+  --surface: var(--cream);
+  --surface-alt: var(--sea-breeze);
+  --border: var(--taupe);
+  --control-border: var(--pebble);       /* inputs: 3:1 against the page */
+  --border-soft: var(--sunkissed-sand);
+  --text: var(--espresso);
+  --muted: var(--driftwood);
+  --link: var(--slate);
+  --accent: var(--caramel-latte);        /* fills, with --accent-ink on top */
+  --accent-ink: var(--espresso);
+  --accent-line: var(--toasted-caramel); /* rings, underlines, dots */
+  --primary: var(--mocha);               /* filled buttons, with --primary-ink */
+  --primary-ink: var(--seashells);
+  --danger: var(--terracotta);
+  --success: var(--sage);
+  --live: var(--sage);
+  --nosig: var(--honey);
+  --off: #857668;
+  --viewport-bg: #26201c;                /* behind the remote screen */
+  --viewport-veil: rgba(38, 32, 28, .88);  /* notes laid over the remote screen */
+  --viewport-hairline: rgba(247, 239, 226, .15);
+  --viewport-hatch: rgba(247, 239, 226, .05);
+
+  /* The header: light, like the page, set apart by a hairline. Darks are
+     spent on type, not on the frame. */
+  --header-bg: var(--cream);
+  --header-fg: var(--espresso);
+  --header-muted: var(--driftwood);
+  --header-accent: var(--toasted-caramel);
+  --header-rule: var(--sunkissed-sand);
+
+  /* Type: Playfair Display for titles, Source Sans 3 for everything read. */
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font: "Source Sans 3", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Shape: soft corners and a low, warm shadow — nothing glossy. */
+  --radius: 6px;
+  --radius-lg: 10px;
+  --shadow: 0 1px 2px rgba(58, 48, 42, .06), 0 4px 14px rgba(58, 48, 42, .06);
+  --shadow-lift: 0 2px 4px rgba(58, 48, 42, .08), 0 10px 24px rgba(58, 48, 42, .10);
+
+  color-scheme: light;
+}
+
+/* An Owner's session has its own header: blush instead of cream, with a
+   caramel banner above it (see auth.js's applySessionLook). The page body is
+   unchanged; only the chrome that frames every page differs, so it shows
+   whatever page is open. */
+body[data-session="owner"] {
+  --header-bg: var(--blush);
+  --header-muted: var(--mocha);
+  --header-rule: var(--caramel-latte);
+}

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <short>HoustonKVM</short>
+  <description>HoustonKVM IP-KVM server: the web interface and API over plain HTTP (8080/tcp, the default --port) and HTTPS (8443/tcp, the default HTTPS port), and low-latency WebRTC video (50000-50100/udp). If you change either port, open that port instead of using this service.</description>
+  <port protocol="tcp" port="8080"/>
+  <port protocol="tcp" port="8443"/>
+  <port protocol="udp" port="50000-50100"/>
+</service>
