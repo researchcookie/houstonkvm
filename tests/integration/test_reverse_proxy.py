@@ -1,7 +1,7 @@
 """
 test_reverse_proxy.py — HoustonKVM behind nginx doing TLS, set up exactly as
-the README says: the server started with its proxy options, and nginx with
-the `location /` block copied from README.md's nginx sketch, so the README
+docs/security.md says: the server started with its proxy options, and nginx with
+the `location /` block copied from docs/security.md's nginx sketch, so the doc
 can't drift from what works.
 
 Checks sign-in and the Secure cookie, the Origin check, X-Forwarded-For
@@ -30,7 +30,7 @@ from server_harness import Client, HoustonKVMServer, TestCA, free_port  # noqa: 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OWNER = ("owner", "ownerpassword1")
 OPERATOR = ("operator1", "operatorpassword1")
-README_OPTIONS = ["--bind=127.0.0.1", "--tls=off", "--secure-cookies", "--trusted-proxy=127.0.0.1"]
+DOC_OPTIONS = ["--bind=127.0.0.1", "--tls=off", "--secure-cookies", "--trusted-proxy=127.0.0.1"]
 
 
 def find_nginx():
@@ -40,11 +40,11 @@ def find_nginx():
     return None
 
 
-def readme_nginx_block():
-    """The ```nginx block in README.md, as written."""
-    with open(os.path.join(REPO, "README.md")) as f:
+def doc_nginx_block():
+    """The ```nginx block in docs/security.md, as written."""
+    with open(os.path.join(REPO, "docs", "security.md")) as f:
         match = re.search(r"```nginx\n(.*?)```", f.read(), re.S)
-    assert match, "README.md has no nginx sketch"
+    assert match, "docs/security.md has no nginx sketch"
     return match.group(1)
 
 
@@ -54,7 +54,7 @@ class TestBehindNginx(unittest.TestCase):
         nginx = find_nginx()
         if not nginx:
             raise unittest.SkipTest("no nginx (set HOUSTONKVM_NGINX)")
-        cls.server = HoustonKVMServer(extra_args=README_OPTIONS, https=False)
+        cls.server = HoustonKVMServer(extra_args=DOC_OPTIONS, https=False)
         cls.server.start()
         try:
             cls._start_nginx(nginx)
@@ -69,7 +69,7 @@ class TestBehindNginx(unittest.TestCase):
         cls.ca = TestCA(os.path.join(d, "ca"))
         _, _, crt, key = cls.ca.issue("proxy")
         cls.port = free_port()
-        location = readme_nginx_block().replace("127.0.0.1:8080", f"127.0.0.1:{cls.server.http_port}")
+        location = doc_nginx_block().replace("127.0.0.1:8080", f"127.0.0.1:{cls.server.http_port}")
         conf = os.path.join(d, "nginx.conf")
         with open(conf, "w") as f:
             f.write(f"""

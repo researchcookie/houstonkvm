@@ -14,7 +14,7 @@ first, and its output is worth including.
 
 ## Building
 
-See the [README](README.md#install). For everyday development, use the dev build.
+See [docs/install.md](docs/install.md). For everyday development, use the dev build.
 It adds debug symbols and the format, lint and memory-check targets, and lives in
 its own directory so it never disturbs a normal build:
 

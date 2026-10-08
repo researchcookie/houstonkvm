@@ -24,7 +24,7 @@ Only the latest release receives security fixes.
 ## What is and isn't a vulnerability
 
 Some behaviour is a known limitation rather than a bug, and is described in the
-[README](README.md#security-read-this): the server starts on plain
+[security guide](docs/security.md): the server starts on plain
 HTTP until an Owner turns on HTTPS, it is meant for trusted networks, and there is
 no two-factor sign-in yet. Reports that improve on those are
 welcome as ordinary issues.

@@ -3,7 +3,7 @@
 # video, install Cisco's openh264 (epel-cisco-openh264) on the server.
 
 Name:           houstonkvm
-Version:        0.1.1
+Version:        0.1.2
 Release:        1%{?dist}
 Summary:        Self-hosted multi-user IP-KVM server
 
@@ -198,6 +198,10 @@ HOUSTONKVM_BINARY=%{_vpath_builddir}/HoustonKVM \
 %systemd_postun_with_restart houstonkvm.service
 
 %changelog
+* Thu Oct 08 2026 Laszlo Coleman <laszlo.coleman@researchcookie.com> - 0.1.2-1
+- Documentation: a short README with a dnf quick start; install and
+  security details move to docs/.
+
 * Wed Oct 07 2026 Laszlo Coleman <laszlo.coleman@researchcookie.com> - 0.1.1-1
 - A CH9329 adapter set to the wrong baud rate is named at once after the
   server boots, not up to five minutes later.

@@ -4,6 +4,16 @@ What changed in each release of HoustonKVM. Versions follow
 [Semantic Versioning](https://semver.org/); while the version is 0.x, a minor
 release can change behaviour.
 
+## 0.1.2 (2026-10-08)
+
+Documentation only; the server is unchanged.
+
+- Signed packages for EL9 and EL10 from a dnf repository. The README's quick
+  start installs from it in a few commands (it needs EPEL and CRB).
+- A shorter README that opens with a demo. Installing, building, first run and
+  hardware are in [docs/install.md](docs/install.md); HTTPS, reverse proxies,
+  sign-in, the audit log and API tokens in [docs/security.md](docs/security.md).
+
 ## 0.1.1 (2026-10-07)
 
 - When a CH9329 adapter answers at a different baud rate than its target is

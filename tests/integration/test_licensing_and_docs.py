@@ -46,7 +46,7 @@ class TestLicense(unittest.TestCase):
                         "spec does not install LICENSE and NOTICE with %license")
 
 
-DOCS = ["README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/API.md"]
+DOCS = ["README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/API.md", "docs/install.md", "docs/security.md"]
 
 
 def github_slug(heading):
