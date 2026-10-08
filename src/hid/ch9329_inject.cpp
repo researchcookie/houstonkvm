@@ -391,7 +391,8 @@ void Ch9329Inject::watchdogLoop() {
             // rate, at most every few minutes (a scan blocks input for ~2s,
             // though nothing gets through while it's this broken anyway).
             auto now = std::chrono::steady_clock::now();
-            if (!alive && fd_ >= 0 && now - lastBaudScan_ > std::chrono::minutes(5)) {
+            if (!alive && fd_ >= 0 &&
+                (!lastBaudScan_ || now - *lastBaudScan_ > std::chrono::minutes(5))) {
                 lastBaudScan_ = now;
                 if (auto rate = scanBaudLocked()) {
                     std::cerr << "Ch9329Inject: " << device_ << " answers at " << *rate

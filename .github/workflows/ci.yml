@@ -22,7 +22,7 @@ jobs:
         # actions/checkout falls back to a plain download without it.
         run: dnf install -y git-core
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build dependencies
         run: |
@@ -38,7 +38,7 @@ jobs:
       - name: Build and test
         run: rpmbuild -ba houstonkvm.spec
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: rpms
           path: |

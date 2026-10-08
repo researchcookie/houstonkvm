@@ -98,7 +98,9 @@ private:
     void watchdogLoop();
     // Watchdog thread only.
     bool linkDownLogged_ = false;
-    std::chrono::steady_clock::time_point lastBaudScan_{};
+    // Unset until the first scan: steady_clock starts at boot, so a zero
+    // time point would hold off the first scan for minutes after one.
+    std::optional<std::chrono::steady_clock::time_point> lastBaudScan_;
 
     // ── Health (see health()) ──
     // Guarded by healthMutex_, never held while taking ioMutex_ (the order

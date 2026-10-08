@@ -4,6 +4,12 @@ What changed in each release of HoustonKVM. Versions follow
 [Semantic Versioning](https://semver.org/); while the version is 0.x, a minor
 release can change behaviour.
 
+## 0.1.1 (2026-10-07)
+
+- When a CH9329 adapter answers at a different baud rate than its target is
+  set to, the server says so straight away after its machine boots, instead
+  of up to five minutes later.
+
 ## 0.1.0 (2026-10-07): first public release
 
 HoustonKVM goes public. This release is everything it does so far.
