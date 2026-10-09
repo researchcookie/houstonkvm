@@ -1,20 +1,23 @@
 # HoustonKVM
 
-**See and drive many machines from one browser, from the BIOS up, on your own server.**
+**Turn your old hardware into an IP-KVM, and drive as many machines as your CPU and bandwidth allow.**
 
 ![Signing in to a machine, then restarting it, all from the browser](docs/images/demo.gif)
 
-- **Many machines, one address.** Each machine needs only a USB HDMI capture
-  dongle and a CH9329 keyboard/mouse adapter. Group and tag them, and find any
-  of them from one directory.
-- **Made for more than one person.** Viewers watch, Operators drive (one at a
-  time per machine), Owners administer. An audit log records who drove what and
-  for how long, but never what they typed.
+- **One address, many targets.** Each machine needs only a USB HDMI capture
+  dongle and a CH9329 keyboard/mouse adapter. Group them, tag them, and search
+  them all under one shareable address.
+- **Made for collaboration.** Viewers can watch, one operator drives each
+  session, and viewers can't bump the operator off the mouse. Actions are
+  auditable; keystrokes are not.
 - **Small and self-contained.** MB sized binary with the web UI built in,
   built-in HTTPS, no cloud and no outbound connections, and an
   [API](docs/API.md) for everything the UI does. Apache-2.0.
 
 ## Quick start
+
+**Per machine you need** a USB HDMI capture dongle that offers MJPEG (most do)
+and a CH9329 serial-to-USB keyboard/mouse adapter. Most dongles carry sound too.
 
 On CentOS Stream, RHEL, AlmaLinux or Rocky Linux 9 or 10 (x86_64):
 
@@ -31,9 +34,6 @@ Open `http://<server>:8080/`, create the Owner account with the one-time setup
 code from `journalctl -u houstonkvm`, and add your machines under **Admin →
 Targets**. Building from source, firewall ports and the full first run are in
 [docs/install.md](docs/install.md).
-
-**Per machine you need** a USB HDMI capture dongle that offers MJPEG (most do)
-and a CH9329 serial-to-USB keyboard/mouse adapter. Most dongles carry sound too.
 
 ## Security: read this
 
@@ -76,12 +76,6 @@ Bug reports, hardware reports and pull requests are welcome. See
 [CONTRIBUTING.md](CONTRIBUTING.md). The short version: run the tests
 (`scripts/run-tests.sh`), and sign off your commits.
 
-## Why the name
-
-Houston is only as big as you make it (do you live inside or outside the Loop?).
-The same goes here: one machine, a dozen, or more. The only limit is your
-appetite for capture dongles and CH9329 adapters.
-
 ## License
 
 HoustonKVM is licensed under the [Apache License 2.0](LICENSE). The libraries it is
@@ -90,4 +84,4 @@ built from keep their own licenses, listed in [THIRD_PARTY_NOTICES.md](THIRD_PAR
 The web interface has no third-party framework or design system — it's
 hand-written HTML, CSS and JavaScript over native browser controls. Its two
 fonts (Playfair Display and Source Sans 3, both OFL-1.1) are served by
-HoustonKVM itself, so the UI never reaches out to the internet.
+HoustonKVM itself, so the UI never reaches out to the Internet.

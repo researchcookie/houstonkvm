@@ -37,7 +37,7 @@ class TestStaticUI(ServerTestCase):
                 self.assertGreater(len(raw), 0)
 
     def test_fonts_are_served_by_us_with_their_licences(self):
-        # Never fetched from the internet: the CSP allows only our own
+        # Never fetched from the Internet: the CSP allows only our own
         # origin, and a KVM may have no way out. Each licence must travel
         # with its font, in the source and in the RPM.
         spec = (REPO_ROOT / "houstonkvm.spec").read_text()

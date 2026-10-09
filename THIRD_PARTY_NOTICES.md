@@ -12,7 +12,7 @@ controls are the browser's own.
 
 It does carry two fonts, each the complete variable font exactly as its
 authors publish it, served by HoustonKVM itself rather than fetched from the
-internet. Each one's licence is beside it in `ui/fonts/`, and the RPM
+Internet. Each one's licence is beside it in `ui/fonts/`, and the RPM
 installs both licences:
 
 | Font | File | Taken from | License |

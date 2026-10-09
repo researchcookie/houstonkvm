@@ -4,6 +4,15 @@ What changed in each release of HoustonKVM. Versions follow
 [Semantic Versioning](https://semver.org/); while the version is 0.x, a minor
 release can change behaviour.
 
+## 0.1.3 (2026-10-08)
+
+Documentation only; the server is unchanged.
+
+- A new README introduction: what HoustonKVM is for, and what each machine
+  needs, before the install commands.
+- The license and documentation checks are now
+  `tests/integration/test_licensing_and_docs.py`.
+
 ## 0.1.2 (2026-10-08)
 
 Documentation only; the server is unchanged.
@@ -72,4 +81,4 @@ HoustonKVM goes public. This release is everything it does so far.
   own user, a firewalld service that opens nothing by itself, and the test
   suite run while building.
 - A web interface of plain HTML, CSS and JavaScript built into the executable,
-  with its two fonts, so it never reaches out to the internet.
+  with its two fonts, so it never reaches out to the Internet.
