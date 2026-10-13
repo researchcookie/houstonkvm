@@ -2,7 +2,9 @@
 Origin check on cookie-authenticated requests, and whose address the
 sign-in rate limiter counts when the server sits behind a proxy."""
 import re
+import socket
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -114,6 +116,75 @@ class TestOriginWhileDriving(ControlTestBase):
         status, raw, _ = self.op1.post(f"/api/targets/{self.A()}/input", key,
                                        headers={"Origin": f"{'https' if self.server.tls else 'http'}://"
                                                           f"127.0.0.1:{self.server.port}"})
+        self.assertEqual(status, 200, raw)
+
+
+class TestRequestBodyLimit(ServerTestCase):
+    """A request body over the per-route cap must be answered 413 once and
+    stop there: no second write into the finished response, and the route
+    handler must not run on the bytes received before the limit tripped."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.owner = Client(cls.server.port, tls=cls.server.tls)
+        status, raw, _ = cls.server.setup_owner(cls.owner, *OWNER)
+        assert status == 200, raw
+
+    def _send_split_oversized_login(self):
+        """POST /api/login whose body crosses the 4096-byte cap mid-way, sent
+        in three writes so the server sees them as separate chunks. The
+        overflow is JSON whitespace, so the bytes kept before and after it
+        still form a VALID login (nonexistent user, short password) — if the
+        handler wrongly ran, it would record a failed attempt against this IP.
+        Returns the raw bytes the server wrote back."""
+        prefix = b'{"username":"nobody","password":"wrongpw"'
+        head = prefix + b" " * (4000 - len(prefix))   # 4000 bytes, under the cap
+        overflow = b" " * 200                           # pushes cumulative over 4096
+        tail = b"}"                                     # head+tail alone is valid JSON
+        content_length = len(head) + len(overflow) + len(tail)
+
+        sock = self.new_client().connect(timeout=5)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        request = (
+            f"POST /api/login HTTP/1.1\r\n"
+            f"Host: 127.0.0.1:{self.server.port}\r\n"
+            f"Content-Type: application/json\r\n"
+            f"Content-Length: {content_length}\r\n\r\n"
+        ).encode()
+        sock.sendall(request + head)
+        time.sleep(0.2)
+        sock.sendall(overflow)   # cumulative now over the cap -> 413
+        time.sleep(0.2)
+        sock.sendall(tail)       # last chunk; must not resurrect the handler
+        sock.settimeout(1)
+        data = b""
+        try:
+            while True:
+                chunk = sock.recv(65536)
+                if not chunk:
+                    break
+                data += chunk
+        except socket.timeout:
+            pass
+        sock.close()
+        return data
+
+    def test_oversized_body_gives_one_413_and_runs_no_handler(self):
+        for _ in range(6):
+            data = self._send_split_oversized_login()
+            self.assertIn(b"413", data.split(b"\r\n", 1)[0], data)
+            # The 413 is the whole response: nothing follows the header
+            # terminator. A handler running after end() would leak its body
+            # (e.g. "Invalid credentials") here.
+            headers, _, trailing = data.partition(b"\r\n\r\n")
+            self.assertEqual(trailing, b"", data)
+
+        # Six over-limit logins for a nonexistent user: had the handler run on
+        # each, this IP would be locked out (5 failures). A correct owner login
+        # proves none were recorded.
+        status, raw, _ = self.new_client().post("/api/login",
+                                                 {"username": OWNER[0], "password": OWNER[1]})
         self.assertEqual(status, 200, raw)
 
 

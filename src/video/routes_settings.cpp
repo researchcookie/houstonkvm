@@ -198,16 +198,8 @@ app.get("/api/settings", [&auth, &db](auto* res, auto* req) {
     if (!uidOpt) return;
     int64_t uid = *uidOpt;
 
-    auto body = std::make_shared<std::string>();
-    res->onData([res, body, &db, uid](std::string_view chunk, bool last) mutable {
-        if (body->size() + chunk.size() > 4096) {
-            res->writeStatus("413 Payload Too Large")->end();
-            return;
-        }
-        body->append(chunk);
-        if (!last) return;
-
-        auto j = json::parse(*body, nullptr, false);
+    readBody(res, 4096, [res, &db, uid](std::string& body) {
+        auto j = json::parse(body, nullptr, false);
         if (j.is_discarded()) {
             res->writeStatus("400 Bad Request")->end("Invalid JSON");
             return;
@@ -261,7 +253,6 @@ app.get("/api/settings", [&auth, &db](auto* res, auto* req) {
         }
         res->writeHeader("Content-Type", "application/json")->end(R"({"ok":true})");
     });
-    res->onAborted([](){});
 })
 .get("/api/video/settings", videoSettingsGet(false))
    .get("/api/targets/:id/video/settings", videoSettingsGet(true))

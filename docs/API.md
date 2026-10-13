@@ -388,8 +388,8 @@ $ curl -H 'Authorization: Bearer <token>' http://kvm.local:8080/api/targets/2/he
   `finished_at` (Unix time).
 - `baud_change.state` is `idle`, `running` or `done` (`null` for connections with no
   adjustable speed). Once started it has `from_baud` and `to_baud`, and once `done`
-  also `ok`, a one-sentence `message` and `finished_at`. The CH9329 supports 1200,
-  2400, 4800, 9600, 14400, 19200, 38400, 57600 and 115200 baud. Adapters ship at
+  also `ok`, a one-sentence `message` and `finished_at`. The accepted rates are
+  1200, 2400, 4800, 9600, 19200, 38400, 57600 and 115200 baud. Adapters ship at
   9600, and at 115200 each input report crosses the serial link 12 times faster.
 
 ## Input messages

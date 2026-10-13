@@ -60,9 +60,12 @@ json baudChangeToJson(const InputBaudChange& c, bool supported) {
     return j;
 }
 
-// What the chip's datasheet lists; 115200 is its fastest.
+// The chip's datasheet rates that Linux termios can also set (baudToSpeed in
+// ch9329_inject.cpp). 14400 is on the datasheet but has no termios constant,
+// so it is left out — accepting it only to fall back to 9600 would be a
+// silent downgrade. 115200 is the fastest offered.
 bool isChipBaud(int baud) {
-    for (int b : {1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115200})
+    for (int b : {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200})
         if (b == baud) return true;
     return false;
 }
@@ -192,7 +195,7 @@ void registerHealthRoutes(uWS::TemplatedApp<SSL>& app, Auth& auth, Database& db,
             auto baud = jsonValueOr(*j, "baud", 0);
             if (!baud || !isChipBaud(*baud)) {
                 res->writeStatus("400 Bad Request")
-                   ->end("baud must be one of 1200, 2400, 4800, 9600, 14400, 19200, "
+                   ->end("baud must be one of 1200, 2400, 4800, 9600, 19200, "
                          "38400, 57600 or 115200");
                 return;
             }

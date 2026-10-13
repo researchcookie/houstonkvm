@@ -139,6 +139,10 @@ auto status = [&auth, &db, &targets, runningTarget](bool scoped) {
         }
         bool controlled = target && !target->driverToken.empty();
         bool isDriver   = target && target->driverToken == authOpt->token;
+        // A driver's own polling counts as being alive, so a tab left open on
+        // the target (but not typing) keeps its lock; see the idle release in
+        // TargetManager.
+        if (isDriver) target->markActivity();
         // Driver's name goes to any Viewer+ caller (same visibility as
         // `controlled` already had) so other viewers can be told who's
         // driving, not just that someone is.
@@ -280,6 +284,7 @@ DispatchResult dispatchInputMessage(const json& j, TargetRuntime& target) {
     InputQueue&    inputQueue    = target.inputQueue;
     bool ready = streamManager.withInput([](InputBackend* b) { return b && b->isReady(); });
     if (!ready) return {DispatchStatus::Unavailable, "Input injection unavailable"};
+    target.markActivity();   // the driver is active; keep their lock alive
 
     auto typeOpt = jsonValueOr(j, "type", std::string{});
     if (!typeOpt) return {DispatchStatus::BadRequest, "Invalid field types"};

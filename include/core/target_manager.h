@@ -9,6 +9,7 @@
 
 #include <App.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
@@ -73,6 +74,15 @@ struct TargetRuntime {
     Actor       driver;
     int64_t     controlSession = 0;
 
+    // When the driver was last seen doing something: sending input, or
+    // polling control status. takeControl() sets it; the idle check in
+    // TargetManager releases a lock left untouched for too long, so a driver
+    // whose tab closed or whose network dropped doesn't hold a machine for
+    // their whole session lifetime. Touched only on the event-loop thread,
+    // like driverToken.
+    std::chrono::steady_clock::time_point lastActivity;
+    void markActivity() { lastActivity = std::chrono::steady_clock::now(); }
+
     // Starts from a clean keyboard/mouse state, then records `token` and
     // `who` as the driver. The caller has already checked nobody else holds
     // the lock. Re-acquiring with the token that already drives is a no-op.
@@ -80,7 +90,7 @@ struct TargetRuntime {
     // Drops the lock and releases every key/button the driver may still have
     // down on the target. No-op if nobody holds it. `reason` is what the
     // audit log says ended the session: "released", "owner_override",
-    // "signed_out", "credentials_revoked", "target_stopped".
+    // "signed_out", "credentials_revoked", "target_stopped", "idle".
     void releaseControl(std::string_view reason);
 
     // Counts the driver's input for the audit log: key presses, and mouse
@@ -142,6 +152,11 @@ public:
     // Call before loadAll(). See ControlHooks.
     void setControlHooks(ControlHooks hooks) { hooks_ = std::move(hooks); }
 
+    // How long a driver's lock may sit with no input and no status poll from
+    // them before the revalidation timer releases it (reason "idle"). Zero
+    // disables the idle release. Set before startDriverRevalidation().
+    void setControlIdleTimeout(std::chrono::milliseconds ms) { controlIdleTimeout_ = ms; }
+
     // Force-closes every /api/stream client on every target (shutdown).
     void closeAllStreams();
 
@@ -178,6 +193,7 @@ private:
 
     struct us_timer_t*                       revalidateTimer_ = nullptr;
     std::function<bool(const std::string&)>  stillValid_;
+    std::chrono::milliseconds                controlIdleTimeout_{std::chrono::minutes(10)};
 
     // Background jobs (retiring runtimes, deferred starts). Detached, but
     // counted so the destructor can wait for all of them.

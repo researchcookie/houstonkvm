@@ -3,7 +3,7 @@
 # video, install Cisco's openh264 (epel-cisco-openh264) on the server.
 
 Name:           houstonkvm
-Version:        0.1.3
+Version:        0.1.4
 Release:        1%{?dist}
 Summary:        Self-hosted multi-user IP-KVM server
 
@@ -198,6 +198,10 @@ HOUSTONKVM_BINARY=%{_vpath_builddir}/HoustonKVM \
 %systemd_postun_with_restart houstonkvm.service
 
 %changelog
+* Mon Oct 13 2026 Laszlo Coleman <laszlo.coleman@researchcookie.com> - 0.1.4-1
+- Reject an over-limit request body once with 413 and stop, instead of
+  letting the rest of a split body reach the route handler afterwards.
+
 * Thu Oct 08 2026 Laszlo Coleman <laszlo.coleman@researchcookie.com> - 0.1.3-1
 - Documentation: a new README introduction.
 

@@ -310,7 +310,9 @@ class TestBaudChange(HealthTestBase):
         url = f"/api/targets/{tid}/health/baud"
         self.assertEqual(self.health(tid)["baud_change"], {"state": "idle"})
         self.assertEqual(self.operator.post(url, {"baud": 115200})[0], 403)
-        for bad in ({"baud": 250000}, {"baud": "fast"}, {}):
+        # 14400 is on the CH9329 datasheet but has no Linux termios speed, so
+        # accepting it would silently fall back to 9600 — it must be refused.
+        for bad in ({"baud": 250000}, {"baud": 14400}, {"baud": "fast"}, {}):
             self.assertEqual(self.owner.post(url, bad)[0], 400, bad)
 
         self.assertEqual(self.operator.post(f"/api/targets/{tid}/control/acquire")[0], 200)

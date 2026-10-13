@@ -81,14 +81,25 @@ template <bool SSL>
 inline void readBody(uWS::HttpResponse<SSL>* res, size_t maxBytes,
                       std::function<void(std::string&)> onComplete) {
     auto body = std::make_shared<std::string>();
-    res->onData([res, body, maxBytes, onComplete = std::move(onComplete)]
+    // Latched once the request is answered — on the 413 below, or after
+    // onComplete has run — so later chunks on the same request are ignored.
+    // Without it, a chunk that overflows maxBytes replies 413 but a smaller
+    // following chunk could still be appended and, when `last` arrives, run
+    // onComplete against a response that has already been ended (a second
+    // write into a finished HTTP response, and the handler running past the
+    // size cap).
+    auto done = std::make_shared<bool>(false);
+    res->onData([res, body, done, maxBytes, onComplete = std::move(onComplete)]
                 (std::string_view chunk, bool last) mutable {
+        if (*done) return;
         if (body->size() + chunk.size() > maxBytes) {
+            *done = true;
             res->writeStatus("413 Payload Too Large")->end();
             return;
         }
         body->append(chunk);
         if (!last) return;
+        *done = true;
         onComplete(*body);
     });
     res->onAborted([](){});

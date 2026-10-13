@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from server_harness import Client
+from server_harness import Client, HoustonKVMServer
 from test_targets import OWNER, TargetTestBase, login
 
 KEY_A, KEY_B = 0x04, 0x05
@@ -692,6 +692,77 @@ class TestUnscopedAliases(ControlTestBase):
         self.assertEqual(self.op1.post("/api/input", {"type": "key", "code": "KeyB", "pressed": True})[0], 200)
         self.wait_held(chip_b, {KEY_B}, "B")
         self.assertEqual(chip_a.held(), set())
+
+
+class TestIdleControlRelease(unittest.TestCase):
+    """A driver who stops interacting — a closed tab, a crashed browser, a
+    dropped network — shouldn't hold a target until their session expires.
+    The server releases the lock after --control-idle-seconds with no input
+    and no status poll from the driver; a tab that is still polling keeps it.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.server = HoustonKVMServer(extra_args=["--control-idle-seconds=2"])
+        cls.server.start()
+        cls.owner = Client(cls.server.port)
+        assert cls.server.setup_owner(cls.owner, *OWNER)[0] == 200
+        assert cls.owner.post("/api/users",
+            {"username": "op", "password": "operatorpassword1", "role": "operator"})[0] == 200
+        cls.op = Client(cls.server.port)
+        login(cls.op, ("op", "operatorpassword1"))
+        cls.chip = FakeChip()
+        status, raw, _ = cls.owner.post("/api/targets",
+            {"name": "Idle", "serial_device": cls.chip.path,
+             "v4l2_device": "/dev/video240", "enabled": True})
+        assert status == 201, raw
+        cls.tid = cls.owner.as_json(raw)["id"]
+        deadline = time.time() + 40
+        while time.time() < deadline:
+            if cls.owner.as_json(cls.owner.get(f"/api/targets/{cls.tid}")[1])["status"]["input_ready"]:
+                break
+            time.sleep(0.2)
+        else:
+            raise AssertionError("target never became input-ready")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.chip.close()
+        cls.server.stop()
+
+    def _controlled(self, client):
+        # Reading status as `client`; only the driver's own poll counts as
+        # activity, so the owner can watch without resetting the idle timer.
+        return client.as_json(client.get(f"/api/targets/{self.tid}/control/status")[1])
+
+    def _wait_until(self, predicate, timeout):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.2)
+        return False
+
+    def test_idle_driver_is_released_and_nothing_left_held(self):
+        self.assertEqual(self.op.post(f"/api/targets/{self.tid}/control/acquire")[0], 200)
+        self.assertEqual(self.op.post(f"/api/targets/{self.tid}/input",
+                         {"type": "key", "code": "KeyA", "pressed": True})[0], 200)
+        self.assertTrue(self._wait_until(lambda: self.chip.held() == {KEY_A}, 5), "key never went down")
+        self.assertTrue(self._controlled(self.op)["is_driver"])
+        # Watch as the owner, whose polling does not keep the driver alive.
+        self.assertTrue(self._wait_until(lambda: not self._controlled(self.owner)["controlled"], 10),
+                        "idle lock was never released")
+        # Released cleanly: the key the driver held is let go of.
+        self.assertEqual(self.chip.held(), set())
+
+    def test_polling_driver_keeps_the_lock(self):
+        self.assertEqual(self.op.post(f"/api/targets/{self.tid}/control/acquire")[0], 200)
+        # What an open tab does: poll control status a few times a window.
+        end = time.time() + 6   # well past the 2 s idle timeout
+        while time.time() < end:
+            self.assertTrue(self._controlled(self.op)["is_driver"], "a polling driver must keep the lock")
+            time.sleep(0.7)
+        self.op.post(f"/api/targets/{self.tid}/control/release")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -40,6 +41,15 @@ QemuInject::QemuInject(const std::string& socketPath) {
                   << socketPath << ",server,nowait\n";
         close(fd_); fd_ = -1; return;
     }
+
+    // A receive timeout for the handshake below: without it a socket that
+    // connects but never sends QMP (a hung or wrong peer) leaves the blocking
+    // read()s — and so this StreamManager worker thread — stuck for good, and
+    // the target never finishes building. After the handshake the socket is
+    // only ever written to and drained non-blocking, so the timeout then does
+    // no harm.
+    struct timeval recvTimeout{2, 0};
+    setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, &recvTimeout, sizeof(recvTimeout));
 
     // Read the QMP greeting then negotiate capabilities.
     char buf[4096];

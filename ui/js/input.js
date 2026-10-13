@@ -127,6 +127,19 @@ document.getElementById('ctrl-btn').addEventListener('click', () => {
 // target for the rest of the session.
 window.addEventListener('blur', () => { if (isDriver) releaseAllKeys(); });
 
+// Closing the tab or navigating away should hand the lock back at once,
+// rather than leaving the next operator waiting on the server's idle
+// timeout. A normal fetch is cancelled as the page unloads, so use
+// sendBeacon, which is delivered after unload and carries the session
+// cookie and Origin the release route needs. pagehide (not
+// visibilitychange, which also fires on an ordinary tab switch) is the
+// real unload signal; the server idle timeout backs up the cases it misses
+// (a crash, a yanked network).
+window.addEventListener('pagehide', () => {
+  if (!isDriver || currentTargetId === null) return;
+  try { navigator.sendBeacon('/api/targets/' + currentTargetId + '/control/release'); } catch (e) {}
+});
+
 // activeVideoEl's intrinsic (source) pixel size — the video's videoWidth/
 // videoHeight, or the MJPEG img's naturalWidth/naturalHeight.
 function intrinsicSize(el) {

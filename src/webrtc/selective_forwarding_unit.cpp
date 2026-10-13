@@ -2,6 +2,7 @@
 
 #include "webrtc/rtc_compat.h"
 
+#include <charconv>
 #include <chrono>
 #include <cstring>
 #include <future>
@@ -328,7 +329,13 @@ static int extractVideoPayloadType(const std::string &sdp, int fallback = 96) {
             auto colonPos = line.find(':');
             auto spacePos = line.find(' ', colonPos);
             if (colonPos == std::string::npos || spacePos == std::string::npos) continue;
-            int payloadType = std::stoi(line.substr(colonPos + 1, spacePos - colonPos - 1));
+            // from_chars, not stoi: stoi throws on a non-numeric or
+            // out-of-range payload type, and this runs on an SFU worker
+            // thread where an escaped exception would take the process down.
+            int payloadType = 0;
+            const char* first = line.data() + colonPos + 1;
+            const char* last  = line.data() + spacePos;
+            if (std::from_chars(first, last, payloadType).ec != std::errc{}) continue;
             std::string codec = line.substr(spacePos + 1);
             for (auto &c : codec) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             if (codec.find("h264") != std::string::npos) h264PayloadType = payloadType;

@@ -53,6 +53,7 @@ int main(int argc, char* argv[]) {
     std::string dbPath        = "houstonkvm.db";
     bool        secureCookies = false;
     int         auditRetentionDays = 90;
+    int         controlIdleSeconds = 600;   // release an untouched driver lock after this
     RequestPolicy policy;
     std::vector<IceServerConfig> iceServers;
     bool        noIceServers  = false;
@@ -98,6 +99,18 @@ int main(int argc, char* argv[]) {
                     throw std::out_of_range("days");
             } catch (const std::exception&) {
                 std::cerr << "Invalid value in " << arg << " (expected 1-36500 days)\n";
+                return 2;
+            }
+        }
+        else if (arg.starts_with("--control-idle-seconds=")) {
+            try {
+                size_t used = 0;
+                auto value = std::string(arg.substr(23));
+                controlIdleSeconds = std::stoi(value, &used);
+                if (used != value.size() || controlIdleSeconds < 0 || controlIdleSeconds > 86400)
+                    throw std::out_of_range("seconds");
+            } catch (const std::exception&) {
+                std::cerr << "Invalid value in " << arg << " (expected 0-86400 seconds, 0 to disable)\n";
                 return 2;
             }
         }
@@ -167,6 +180,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Usage: houstonkvm [--port=8080] [--bind=0.0.0.0] [--db=houstonkvm.db]\n"
                           "                  [--secure-cookies] [--trusted-proxy=ADDR]...\n"
                           "                  [--allowed-origin=URL]... [--audit-retention-days=90]\n"
+                          "                  [--control-idle-seconds=600]\n"
                           "                  [--ice-server=URL|none]... [--tls=on|off]\n"
                           "                  [--https-port=8443] [--tls-cert=FILE --tls-key=FILE]\n"
                           "                  [--log-format=text|json]\n"
@@ -192,6 +206,10 @@ int main(int argc, char* argv[]) {
                           "via the /api/targets API.\n"
                           "--audit-retention-days is how long the audit log (sign-ins, account and\n"
                           "target changes, who drove which target and for how long) is kept.\n"
+                          "--control-idle-seconds releases a target's driver lock after that long\n"
+                          "with no input and no status poll from the driver (a closed tab or a\n"
+                          "dropped network), so the next operator isn't locked out. 600 by\n"
+                          "default; 0 keeps the lock until the driver releases it or signs out.\n"
                           "--secure-cookies marks the plain-HTTP session cookie Secure; only use\n"
                           "it when a reverse proxy terminates TLS in front of this server,\n"
                           "otherwise browsers will silently refuse to store it.\n"
@@ -464,6 +482,7 @@ int main(int argc, char* argv[]) {
     // their control (see TargetManager::startDriverRevalidation). Bounded
     // staleness: at most one interval. A database error counts as "still
     // valid" — a transient hiccup mustn't yank control mid-task.
+    targets.setControlIdleTimeout(std::chrono::seconds(controlIdleSeconds));
     targets.startDriverRevalidation([&auth, &db](const std::string& token) {
         DbOutcome outcome;
         auto user = auth.verifySession(db, token, outcome);

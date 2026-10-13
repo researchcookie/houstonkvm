@@ -4,6 +4,29 @@ What changed in each release of HoustonKVM. Versions follow
 [Semantic Versioning](https://semver.org/); while the version is 0.x, a minor
 release can change behaviour.
 
+## Unreleased
+
+- A target's control lock is released when the driver's browser tab closes,
+  and by the server after `--control-idle-seconds` (default 600) with no input
+  and no status poll from the driver — so a closed tab or a dropped network no
+  longer holds a machine until the session expires. A tab that is still open
+  and polling keeps its lock.
+- The QEMU QMP input backend no longer hangs a target's startup when the QMP
+  socket connects but never completes the handshake; it gives up after a short
+  timeout and the target comes up with input marked unavailable.
+- The serial-adapter speed `14400` is no longer offered: it has no Linux
+  termios speed and was silently falling back to 9600. The accepted rates are
+  1200, 2400, 4800, 9600, 19200, 38400, 57600 and 115200.
+
+## 0.1.4 (2026-10-13)
+
+- A request body larger than a route's limit is now answered `413 Payload Too
+  Large` once and nothing further happens. Previously the rest of a body split
+  across network packets could still reach the route handler after the `413`
+  had been sent, which ran the handler past the size limit and wrote a second
+  time into the already-finished response. Affects every route that reads a
+  body, including ones reachable before sign-in.
+
 ## 0.1.3 (2026-10-08)
 
 Documentation only; the server is unchanged.

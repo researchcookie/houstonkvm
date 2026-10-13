@@ -35,6 +35,7 @@ void TargetRuntime::takeControl(const std::string& token, const Actor& who) {
     driverToken = token;
     driverName = who.username;
     driver = who;
+    markActivity();
     controlSession = hooks_.started ? hooks_.started(*this, who) : 0;
 }
 
@@ -211,11 +212,22 @@ void TargetManager::onRevalidateTimer(struct us_timer_t* timer) {
 }
 
 void TargetManager::revalidateDrivers() {
+    const auto now = std::chrono::steady_clock::now();
     for (auto& [id, runtime] : runtimes_) {
-        if (runtime->driverToken.empty() || stillValid_(runtime->driverToken)) continue;
-        std::cout << "Target " << id << ": driver's credentials are no longer valid — "
-                  << "releasing control\n";
-        runtime->releaseControl("credentials_revoked");
+        if (runtime->driverToken.empty()) continue;
+        if (!stillValid_(runtime->driverToken)) {
+            std::cout << "Target " << id << ": driver's credentials are no longer valid — "
+                      << "releasing control\n";
+            runtime->releaseControl("credentials_revoked");
+            continue;
+        }
+        if (controlIdleTimeout_ > std::chrono::milliseconds::zero() &&
+            now - runtime->lastActivity > controlIdleTimeout_) {
+            std::cout << "Target " << id << ": driver idle for "
+                      << std::chrono::duration_cast<std::chrono::seconds>(controlIdleTimeout_).count()
+                      << " s (no input or status poll) — releasing control\n";
+            runtime->releaseControl("idle");
+        }
     }
 }
 
