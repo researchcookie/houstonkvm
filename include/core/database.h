@@ -41,8 +41,9 @@ public:
     // Per-target capture + input wiring (capture device/mode, input backend
     // selection, WebRTC bitrate). Distinct from user_settings, which holds
     // per-user UI preferences. Which backend a target uses follows the same
-    // precedence StreamManager always applied: QEMU QMP socket, then CH9329
-    // serial device, then the local USB-HID-gadget fallback.
+    // precedence StreamManager always applied: QEMU QMP socket, then the
+    // serial device (a CH9329, or a board with kvmd's HID firmware, as
+    // serialAdapter says), then the local USB-HID-gadget fallback.
     struct TargetSettings {
         std::string v4l2Device      = "/dev/video0";
         uint32_t    captureWidth    = 1280;
@@ -51,6 +52,7 @@ public:
         std::string qmpSocket;
         std::string serialDevice;
         int         serialBaud      = 9600;
+        std::string serialAdapter   = "ch9329";   // or "kvmd-hid"
         uint32_t    webrtcBitrateKbps = 4000;
         std::string audioDevice     = "auto";   // see video/audio_capture.h
 

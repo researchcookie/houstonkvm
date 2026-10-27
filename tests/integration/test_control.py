@@ -755,6 +755,25 @@ class TestIdleControlRelease(unittest.TestCase):
         # Released cleanly: the key the driver held is let go of.
         self.assertEqual(self.chip.held(), set())
 
+    def test_a_driver_waiting_on_a_long_paste_keeps_the_lock(self):
+        # A script that sends text and waits for it to be typed, without
+        # polling, is still using the target until the last key.
+        self.assertEqual(self.op.post(f"/api/targets/{self.tid}/control/acquire")[0], 200)
+        text = "the quick brown fox jumps over the lazy dog " * 2   # about 7 s at 9600 baud
+        self.assertEqual(self.op.post(f"/api/targets/{self.tid}/input",
+                         {"type": "text", "text": text})[0], 200)
+        while True:
+            # Checked before typing_remaining: releasing the lock also stops
+            # the typing, which would end the loop without noticing.
+            status = self._controlled(self.owner)
+            self.assertTrue(status["controlled"], "the lock was released while typing")
+            if not status["typing_remaining"]:
+                break
+            time.sleep(0.3)
+        # Once the text is done, the usual idle release applies again.
+        self.assertTrue(self._wait_until(lambda: not self._controlled(self.owner)["controlled"], 10),
+                        "idle lock was never released after typing")
+
     def test_polling_driver_keeps_the_lock(self):
         self.assertEqual(self.op.post(f"/api/targets/{self.tid}/control/acquire")[0], 200)
         # What an open tab does: poll control status a few times a window.

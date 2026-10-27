@@ -462,7 +462,8 @@ class TestMigrationFromSingleTarget(unittest.TestCase):
         self.assertEqual(t["config"], {
             "v4l2_device": "/dev/video7", "capture_width": 1920, "capture_height": 1080,
             "capture_fps": 25, "qmp_socket": "", "serial_device": "/dev/ttyUSB3",
-            "serial_baud": 115200, "webrtc_bitrate_kbps": 6500, "audio_device": "auto",
+            "serial_baud": 115200, "serial_adapter": "ch9329", "webrtc_bitrate_kbps": 6500,
+            "audio_device": "auto",
         })
         # The pre-multi-target API answers exactly as before.
         legacy = self.owner.as_json(self.owner.get("/api/admin/settings")[1])
@@ -477,7 +478,7 @@ class TestMigrationFromSingleTarget(unittest.TestCase):
         try:
             row = conn.execute("SELECT v4l2_device FROM server_settings WHERE id = 1").fetchone()
             self.assertEqual(row[0], "/dev/video7")
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 10)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 11)
         finally:
             conn.close()
 

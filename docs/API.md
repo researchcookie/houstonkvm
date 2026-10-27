@@ -167,16 +167,21 @@ Creating a target (`POST /api/targets`, Owner):
   "enabled": true,
   "v4l2_device": "/dev/video2",
   "capture_width": 1280, "capture_height": 720, "capture_fps": 30,
-  "serial_device": "/dev/ttyUSB0", "serial_baud": 9600,
+  "serial_device": "/dev/ttyUSB0", "serial_baud": 9600, "serial_adapter": "ch9329",
   "webrtc_bitrate_kbps": 4000,
   "audio_device": "auto"
 }
 ```
 
 Only `name` is required, but say how keyboard and mouse reach the machine.
-That is one of three ways, chosen by which field is set: a CH9329 adapter
+That is one of three ways, chosen by which field is set: a serial adapter
 (`serial_device`), a QEMU virtual machine (`qmp_socket`), or, if neither is set,
-this computer's own USB gadget port, which only one target can use. Names must be
+this computer's own USB gadget port, which only one target can use.
+`serial_adapter` says what is on the serial device: `ch9329` (the default) or
+`kvmd-hid`, a Raspberry Pi Pico or Arduino running kvmd's open-source HID
+firmware (see [install.md](install.md#keyboard-and-mouse-with-open-source-firmware)).
+Changing `serial_adapter` without giving `serial_baud` also sets the new adapter's
+usual speed: 9600 for a CH9329, 115200 for the firmware. Names must be
 unique, and one capture device or serial port can belong to only one target
 (`409` otherwise). Tags may contain letters, digits and `. _ : / -`.
 `audio_device` is where the sound comes from (see [Sound](#sound)).
@@ -358,7 +363,7 @@ Whether a target's keyboard/mouse link works, and if not, which cable to look at
 | Route | Role | |
 |---|---|---|
 | `GET /api/targets/:id/health` | Viewer | The link's state, a one-line `summary` saying what's wrong, and the last hour's numbers; plus `video` (see [Video health](#video-health)). |
-| `POST /api/targets/:id/health/test` | Owner (browser session) | Start a self-test: 20 status checks to the adapter plus a read of its settings. Nothing is typed or clicked on the target. `202` when started; `409` while someone has control or a test is already running; `400` for connections that can't be tested. Taking control is refused until it ends, a few seconds later. |
+| `POST /api/targets/:id/health/test` | Owner (browser session) | Start a self-test: 20 status checks to the adapter, plus a read of a CH9329's settings. Nothing is typed or clicked on the target. `202` when started; `409` while someone has control or a test is already running; `400` for connections that can't be tested. Taking control is refused until it ends, a few seconds later. |
 | `POST /api/targets/:id/health/baud` | Owner (browser session) | Body `{"baud":115200}`. Change a CH9329 adapter's line speed: rewrite the rate stored in the adapter, reset it if it needs that to switch, and check it answers reliably at the new rate. If it does, the target's `serial_baud` is saved to match. Otherwise the adapter is put back as it was. `202` when started; `409` while someone has control or a change is already running; `400` for an unsupported rate or a connection with no adjustable speed. Taking control is refused until it ends, a few seconds later. |
 
 ```console
@@ -375,19 +380,22 @@ $ curl -H 'Authorization: Bearer <token>' http://kvm.local:8080/api/targets/2/he
 
 - `state`: `good`; `degraded` (working, but checks failed recently); `down` (input
   can't get through); `unknown` (not measured yet, e.g. the target is starting).
-- `kind`: `ch9329`, `usb-gadget` or `qemu`. Only a CH9329 adapter can answer back,
-  so the measured fields and `test` are `null` for the others, whose state only
-  says whether the device is there.
-- A CH9329 is checked every 5 seconds. `target_enumerated` is whether the target
-  machine has recognised the adapter as a keyboard and mouse. `chip_baud` is the rate
-  stored in the adapter itself; `answers_at_baud` is set when the adapter stopped
-  answering at the configured rate but answers at another one.
+- `kind`: `ch9329`, `kvmd-hid`, `usb-gadget` or `qemu`. Only the serial adapters
+  (`ch9329` and `kvmd-hid`) can answer back, so the measured fields and `test` are
+  `null` for the others, whose state only says whether the device is there.
+- A serial adapter is checked every 5 seconds. `target_enumerated` is whether the
+  target machine has recognised the adapter as a keyboard and mouse. `answers_at_baud`
+  is set when the adapter stopped answering at the configured rate but answers at
+  another one. `firmware` and `chip_baud` (the rate stored in the adapter itself)
+  come from a CH9329 only. A `kvmd-hid` board is also `down` when its firmware has
+  the mouse in relative or PS/2 mode, or the keyboard or mouse off.
 - `test.state` is `idle`, `running` or `done`. Once `done` it also has
   `verdict_state`, `verdict`, `probes`, `ok`, `reply_ms_avg`, `reply_ms_max`,
   `target_enumerated`, `firmware`, `chip_baud`, `work_mode`, `serial_mode` and
   `finished_at` (Unix time).
 - `baud_change.state` is `idle`, `running` or `done` (`null` for connections with no
-  adjustable speed). Once started it has `from_baud` and `to_baud`, and once `done`
+  adjustable speed, including `kvmd-hid`, whose speed is set when its firmware is
+  built). Once started it has `from_baud` and `to_baud`, and once `done`
   also `ok`, a one-sentence `message` and `finished_at`. The accepted rates are
   1200, 2400, 4800, 9600, 19200, 38400, 57600 and 115200 baud. Adapters ship at
   9600, and at 115200 each input report crosses the serial link 12 times faster.
@@ -415,7 +423,7 @@ To type a whole string, send it as one message and let the server press the keys
 | `text_cancel` | none | Stops typing what's left. A key it had down, and Shift, are released. |
 
 Typing is paced for the keyboard link: a CH9329 at 9600 baud manages about 13
-characters a second, and 50 or so at 115200. Your own `key` and mouse messages
+characters a second, and 50 or so at 115200, as does a `kvmd-hid` board. Your own `key` and mouse messages
 aren't held up behind it. Up to 65,536 characters can be waiting at once; past
 that, `text` answers `503`. Typing stops, with nothing left held, whenever control
 ends, and if the keyboard link goes down. Follow it with `typing_remaining` in

@@ -5,7 +5,8 @@
 ![Signing in to a machine, then restarting it, all from the browser](docs/images/demo.gif)
 
 - **One address, many targets.** Each machine needs only a USB HDMI capture
-  dongle and a CH9329 keyboard/mouse adapter. Group them, tag them, and search
+  dongle and a CH9329 keyboard/mouse adapter, or a Raspberry Pi Pico or Arduino
+  running open-source HID firmware instead. Group them, tag them, and search
   them all under one shareable address.
 - **Made for collaboration.** Viewers can watch, one operator drives each
   session, and viewers can't bump the operator off the mouse. Actions are
@@ -18,6 +19,9 @@
 
 **Per machine you need** a USB HDMI capture dongle that offers MJPEG (most do)
 and a CH9329 serial-to-USB keyboard/mouse adapter. Most dongles carry sound too.
+If you'd rather not plug a closed chip into your machines, a Raspberry Pi Pico or
+Arduino running kvmd's open-source HID firmware works too: see
+[docs/install.md](docs/install.md#keyboard-and-mouse-with-open-source-firmware).
 
 On CentOS Stream, RHEL, AlmaLinux or Rocky Linux 9 or 10 (x86_64):
 

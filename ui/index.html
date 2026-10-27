@@ -455,6 +455,11 @@
                 <label for="t-in-serial">CH9329 USB-serial adapter</label>
               </div>
               <div class="radio-row">
+                <input type="radio" id="t-in-kvmd" name="t-input" value="kvmd">
+                <label for="t-in-kvmd">Raspberry Pi Pico or Arduino with kvmd's open-source HID firmware
+                  <span class="field-desc">Wired to a USB-serial adapter on this server.</span></label>
+              </div>
+              <div class="radio-row">
                 <input type="radio" id="t-in-qemu" name="t-input" value="qemu">
                 <label for="t-in-qemu">QEMU virtual machine</label>
               </div>
@@ -478,7 +483,7 @@
                 <input id="t-qmp" placeholder="/var/run/qemu/qmp.sock" autocomplete="off">
               </div>
               <p class="hint" id="t-gadget-note" hidden>Only one target can use this computer's own USB gadget port.
-                Every other target needs a CH9329 adapter or a QEMU socket.</p>
+                Every other target needs a serial adapter or a QEMU socket.</p>
             </fieldset>
 
             <fieldset>

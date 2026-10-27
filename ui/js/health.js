@@ -14,7 +14,8 @@ const HEALTH_TAGS = {
 };
 const FASTEST_BAUD = 115200;   // the CH9329's fastest
 const INPUT_KINDS = {
-  'ch9329': 'CH9329 serial adapter', 'usb-gadget': 'USB gadget port', 'qemu': 'QEMU virtual machine',
+  'ch9329': 'CH9329 serial adapter', 'kvmd-hid': 'Board with kvmd’s HID firmware, over serial',
+  'usb-gadget': 'USB gadget port', 'qemu': 'QEMU virtual machine',
 };
 
 function updateHealthAvailability() {
@@ -43,7 +44,7 @@ function renderHealthFacts(h) {
     dl.append(el('dt', {}, term), el('dd', {}, String(value)));
   };
   fact('Connection', INPUT_KINDS[h.kind] || h.kind || 'none');
-  if (h.kind !== 'ch9329') return;
+  if (h.kind !== 'ch9329' && h.kind !== 'kvmd-hid') return;
   const yesNo = v => v === null ? null : v ? 'yes' : 'no';
   fact('Target recognises it', yesNo(h.target_enumerated));
   fact('Firmware', h.firmware);

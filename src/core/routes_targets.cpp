@@ -166,9 +166,11 @@ std::string applySettingsFields(const json& j, Database::TargetSettings& s) {
     auto qmp     = jsonValueOr(j, "qmp_socket", s.qmpSocket);
     auto serial  = jsonValueOr(j, "serial_device", s.serialDevice);
     auto baud    = jsonValueOr(j, "serial_baud", s.serialBaud);
+    auto adapter = jsonValueOr(j, "serial_adapter", s.serialAdapter);
     auto bitrate = jsonValueOr(j, "webrtc_bitrate_kbps", static_cast<int>(s.webrtcBitrateKbps));
     auto audio   = jsonValueOr(j, "audio_device", s.audioDevice);
-    if (!device || !width || !height || !fps || !qmp || !serial || !baud || !bitrate || !audio)
+    if (!device || !width || !height || !fps || !qmp || !serial || !baud || !adapter || !bitrate ||
+        !audio)
         return "Invalid field types";
 
     if (device->empty() || device->size() > 256) return "Invalid v4l2_device";
@@ -177,6 +179,13 @@ std::string applySettingsFields(const json& j, Database::TargetSettings& s) {
     if (*fps <= 0 || *fps > 120) return "Invalid capture_fps";
     if (qmp->size() > 256 || serial->size() > 256) return "qmp_socket/serial_device too long";
     if (*baud <= 0) return "Invalid serial_baud";
+    if (*adapter != "ch9329" && *adapter != "kvmd-hid")
+        return "Invalid serial_adapter: use \"ch9329\" or \"kvmd-hid\"";
+    // Changing the adapter without naming a speed takes the new one's usual
+    // speed: the old speed belonged to the old adapter. A CH9329 ships at
+    // 9600; kvmd's HID firmware is built for 115200.
+    if (*adapter != s.serialAdapter && !(j.is_object() && j.contains("serial_baud")))
+        *baud = *adapter == "kvmd-hid" ? 115200 : 9600;
     if (*bitrate <= 0 || *bitrate > 100000) return "Invalid webrtc_bitrate_kbps";
     if (!isValidAudioSetting(*audio))
         return "Invalid audio_device: use \"auto\", \"\" for none, or an ALSA hw:, plughw: or "
@@ -189,6 +198,7 @@ std::string applySettingsFields(const json& j, Database::TargetSettings& s) {
     s.qmpSocket         = *qmp;
     s.serialDevice      = *serial;
     s.serialBaud        = *baud;
+    s.serialAdapter     = *adapter;
     s.webrtcBitrateKbps = static_cast<uint32_t>(*bitrate);
     s.audioDevice       = *audio;
     return "";
@@ -203,6 +213,7 @@ json targetSettingsToJson(const Database::TargetSettings& s) {
         {"qmp_socket", s.qmpSocket},
         {"serial_device", s.serialDevice},
         {"serial_baud", s.serialBaud},
+        {"serial_adapter", s.serialAdapter},
         {"webrtc_bitrate_kbps", s.webrtcBitrateKbps},
         {"audio_device", s.audioDevice},
     };

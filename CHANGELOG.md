@@ -4,13 +4,33 @@ What changed in each release of HoustonKVM. Versions follow
 [Semantic Versioning](https://semver.org/); while the version is 0.x, a minor
 release can change behaviour.
 
-## Unreleased
+## 0.2.0 (2026-10-26)
 
+- A second kind of keyboard and mouse adapter: a Raspberry Pi Pico, an Arduino
+  Micro or Leonardo, or a 5 V Pro Micro running kvmd's open-source HID
+  firmware, wired to a USB-serial adapter. HoustonKVM doesn't include the
+  firmware: you build and flash it yourself. For anyone who would rather not
+  plug a closed CH9329 into their machines. Choose it per target in Admin, or
+  set the new `serial_adapter` field to `kvmd-hid` in the API; existing targets
+  stay `ch9329`. The board confirms each command, and a key or click that didn't
+  arrive is sent again. Input health and the input test work as for a CH9329.
+  [docs/install.md](docs/install.md#keyboard-and-mouse-with-open-source-firmware)
+  covers what to buy, flashing and wiring, and `scripts/kvmd-hid-selftest.py`
+  checks a board on its own.
 - A target's control lock is released when the driver's browser tab closes,
   and by the server after `--control-idle-seconds` (default 600) with no input
   and no status poll from the driver — so a closed tab or a dropped network no
   longer holds a machine until the session expires. A tab that is still open
-  and polling keeps its lock.
+  and polling keeps its lock, and so does a driver whose pasted text is still
+  being typed.
+- Deleting or disabling a target while its video is capturing, or stopping
+  the server, no longer writes into freed memory: the capture thread is now
+  stopped before the target's state is torn down, rather than after part of
+  it. It could crash the server.
+- A QEMU virtual machine that exits, or is shut down from inside, while
+  someone drives it no longer takes the whole server down. The next key or
+  mouse move sent to its closed QMP socket used to kill HoustonKVM, and with
+  it every target; now that target's input is reported down.
 - The QEMU QMP input backend no longer hangs a target's startup when the QMP
   socket connects but never completes the handshake; it gives up after a short
   timeout and the target comes up with input marked unavailable.

@@ -41,7 +41,8 @@ void registerTargetRoutes(uWS::TemplatedApp<SSL>& app, Auth& auth, Database& db,
 
 // Applies whichever hardware/capture fields are present in `j` (v4l2_device,
 // capture_width/height/fps, qmp_socket, serial_device, serial_baud,
-// webrtc_bitrate_kbps) onto `settings`, leaving absent ones as they were.
+// serial_adapter, webrtc_bitrate_kbps, audio_device) onto `settings`,
+// leaving absent ones as they were.
 // Shared with the legacy /api/admin/settings and /api/video/settings routes
 // so every path enforces identical limits and error messages. Returns ""
 // on success, otherwise a message naming the bad field.

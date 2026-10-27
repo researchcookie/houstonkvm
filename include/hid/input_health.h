@@ -21,12 +21,13 @@ inline const char* healthStateName(HealthState s) {
 }
 
 struct InputHealth {
-    std::string kind;       // "ch9329", "usb-gadget", "qemu"
+    std::string kind;       // "ch9329", "kvmd-hid", "usb-gadget", "qemu"
     HealthState state = HealthState::Unknown;
     // One sentence for a person: what's wrong and which cable to look at.
     std::string summary;
 
-    // Measured by backends that can talk back (CH9329); unset otherwise.
+    // Measured by backends that can talk back (the serial adapters); unset
+    // otherwise, and firmwareVersion and chipBaud come from a CH9329 only.
     std::optional<bool> deviceOpen;
     std::optional<bool> targetEnumerated;   // the target machine recognised the adapter
     std::optional<int>  firmwareVersion;    // raw byte, e.g. 0x30 = 3.0

@@ -212,15 +212,19 @@ void TargetManager::onRevalidateTimer(struct us_timer_t* timer) {
 }
 
 void TargetManager::revalidateDrivers() {
-    const auto now = std::chrono::steady_clock::now();
     for (auto& [id, runtime] : runtimes_) {
         if (runtime->driverToken.empty()) continue;
+        const auto now = std::chrono::steady_clock::now();
         if (!stillValid_(runtime->driverToken)) {
             std::cout << "Target " << id << ": driver's credentials are no longer valid — "
                       << "releasing control\n";
             runtime->releaseControl("credentials_revoked");
             continue;
         }
+        // Text still being typed for the driver counts as their activity: a
+        // script that sends a long paste and then waits must not lose the
+        // lock, and the rest of the text, partway through.
+        if (runtime->inputQueue.textRemaining() > 0) runtime->markActivity();
         if (controlIdleTimeout_ > std::chrono::milliseconds::zero() &&
             now - runtime->lastActivity > controlIdleTimeout_) {
             std::cout << "Target " << id << ": driver idle for "

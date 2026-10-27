@@ -72,6 +72,14 @@ royalties for the binaries it distributes itself. That coverage does not extend
 to OpenH264 you compile yourself. See Cisco's OpenH264 binary license if this
 matters for your use.
 
+## Keyboard and mouse boards it talks to
+
+HoustonKVM can drive a board running the kvmd project's HID firmware
+(github.com/pikvm/kvmd, GPL-3.0-or-later). It only speaks that firmware's
+serial protocol, implemented independently: none of the firmware's code or
+data is included in or distributed with HoustonKVM. Users build and flash the
+firmware themselves from its own source.
+
 ## License texts
 
 The Apache License 2.0 that covers uSockets and uWebSockets is the same text as

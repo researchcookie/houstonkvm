@@ -82,7 +82,8 @@ bool QemuInject::sendCmd(const std::string& payload) {
     std::lock_guard<std::mutex> lock(ioMutex_);
     if (fd_ < 0) return false;
     std::string msg = payload + "\n";
-    ssize_t n = write(fd_, msg.c_str(), msg.size());
+    // MSG_NOSIGNAL: a VM that has exited is an error here, not a SIGPIPE.
+    ssize_t n = send(fd_, msg.c_str(), msg.size(), MSG_NOSIGNAL);
     if (n != static_cast<ssize_t>(msg.size())) {
         std::cerr << "QemuInject: write failed: " << strerror(errno) << "\n";
         close(fd_); fd_ = -1;

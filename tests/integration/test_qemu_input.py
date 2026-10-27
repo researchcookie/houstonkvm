@@ -33,6 +33,7 @@ class FakeQmp:
         self.sock.bind(self.path)
         self.sock.listen(1)
         self.commands = []            # every decoded command object received
+        self.conns = []
         self._lock = threading.Lock()
         self._stop = False
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -40,7 +41,7 @@ class FakeQmp:
 
     def _run(self):
         self.sock.settimeout(0.5)
-        conns = []
+        conns = self.conns
         while not self._stop:
             try:
                 conn, _ = self.sock.accept()
@@ -95,6 +96,15 @@ class FakeQmp:
             if c.get("execute") == "input-send-event":
                 events += c.get("arguments", {}).get("events", [])
         return events
+
+    def drop_clients(self):
+        """Closes every connection, as QEMU does when the VM exits."""
+        for c in list(self.conns):
+            try:
+                c.shutdown(socket.SHUT_RDWR)
+                c.close()
+            except OSError:
+                pass
 
     def close(self):
         self._stop = True
@@ -151,6 +161,29 @@ class TestQmpInput(QmpTestBase):
                         for e in self.qmp.input_events()),
             10, "the key to reach QMP")
         self.op.post(f"/api/targets/{self.tid}/control/release")
+
+
+class TestQmpVmExit(QmpTestBase):
+    """The VM exits (or is shut down from inside) while someone drives it.
+    Writing to a socket whose other end has closed raises SIGPIPE, whose
+    default action kills the process: the whole server, every target."""
+
+    def test_the_server_survives_and_says_input_is_down(self):
+        self.wait_until(lambda: self.target()["status"]["input_ready"], 20, "QMP input ready")
+        self.assertEqual(self.op.post(f"/api/targets/{self.tid}/control/acquire")[0], 200)
+        self.qmp.drop_clients()
+        time.sleep(0.3)
+        for i in range(10):
+            try:
+                self.op.post(f"/api/targets/{self.tid}/input",
+                             {"type": "mousemove", "x": i / 10, "y": 0.5})
+            except OSError:
+                break
+            time.sleep(0.1)
+        time.sleep(1)
+        self.assertIsNone(self.server.proc.poll(), "the server exited")
+        self.wait_until(lambda: not self.target()["status"]["input_ready"], 10,
+                        "input to be reported down")
 
 
 class TestQmpSilentHandshake(QmpTestBase):

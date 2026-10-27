@@ -3,6 +3,7 @@
 #include "core/http_common.h"
 #include "core/target_http.h"
 #include "hid/input_backend.h"
+#include "hid/serial_link.h"
 #include "video/audio_capture.h"
 
 #include <algorithm>
@@ -58,16 +59,6 @@ json baudChangeToJson(const InputBaudChange& c, bool supported) {
     j["message"]     = c.message;
     j["finished_at"] = c.finishedAtUnix;
     return j;
-}
-
-// The chip's datasheet rates that Linux termios can also set (baudToSpeed in
-// ch9329_inject.cpp). 14400 is on the datasheet but has no termios constant,
-// so it is left out — accepting it only to fall back to 9600 would be a
-// silent downgrade. 115200 is the fastest offered.
-bool isChipBaud(int baud) {
-    for (int b : {1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200})
-        if (b == baud) return true;
-    return false;
 }
 
 } // namespace
@@ -193,7 +184,7 @@ void registerHealthRoutes(uWS::TemplatedApp<SSL>& app, Auth& auth, Database& db,
             auto j = parseJsonOr400(res, body);
             if (!j) return;
             auto baud = jsonValueOr(*j, "baud", 0);
-            if (!baud || !isChipBaud(*baud)) {
+            if (!baud || !isSerialBaud(*baud)) {
                 res->writeStatus("400 Bad Request")
                    ->end("baud must be one of 1200, 2400, 4800, 9600, 19200, "
                          "38400, 57600 or 115200");

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(HoustonKVM VERSION 0.1.4 LANGUAGES CXX)
+project(HoustonKVM VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -55,9 +55,11 @@ set(SERVER_SOURCES
     src/hid/ch9329_inject.cpp
     src/hid/input_inject.cpp
     src/hid/input_queue.cpp
+    src/hid/kvmd_hid_inject.cpp
     src/hid/qemu_inject.cpp
     src/hid/routes_health.cpp
     src/hid/routes_input.cpp
+    src/hid/serial_link.cpp
     src/hid/serial_ports.cpp
     src/hid/text_typing.cpp
     src/video/audio_capture.cpp

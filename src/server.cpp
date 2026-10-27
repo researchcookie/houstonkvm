@@ -288,6 +288,10 @@ int main(int argc, char* argv[]) {
     sigaddset(&shutdownSignals, SIGTERM);
     sigaddset(&shutdownSignals, SIGHUP);   // not shutdown: re-reads the HTTPS certificate
     pthread_sigmask(SIG_BLOCK, &shutdownSignals, nullptr);
+    // A write to a socket whose other end has gone (a VM's QMP socket when
+    // the VM exits) raises SIGPIPE, which by default kills the process, and
+    // with it every target. The write's own error is all that's needed.
+    signal(SIGPIPE, SIG_IGN);
 
     Database db(dbPath);
     if (!db.isOpen()) {

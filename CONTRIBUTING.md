@@ -5,12 +5,14 @@ requests are all welcome.
 
 ## Hardware reports count
 
-The goal is to work with as many CH9329 adapters and capture dongles as possible,
-and only people who own them can say what works. Open an issue with the model, its
-USB ID (`lsusb`), the output of `v4l2-ctl --list-formats-ext` for a capture device,
-and what did or didn't work. For a CH9329 adapter,
+The goal is to work with as many CH9329 adapters, boards and capture dongles as
+possible, and only people who own them can say what works. Open an issue with the
+model, its USB ID (`lsusb`), the output of `v4l2-ctl --list-formats-ext` for a
+capture device, and what did or didn't work. For a CH9329 adapter,
 [`scripts/ch9329-selftest.py`](scripts/ch9329-selftest.py) checks it on its own
-first, and its output is worth including.
+first, and for a board running kvmd's HID firmware,
+[`scripts/kvmd-hid-selftest.py`](scripts/kvmd-hid-selftest.py) does. Their output
+is worth including.
 
 ## Building
 
@@ -39,8 +41,9 @@ $ scripts/run-ui-tests.sh       # web UI in a real browser
 ```
 
 The backend tests use only the Python standard library. The keyboard and mouse
-tests talk to a pseudo-terminal that behaves like a CH9329 chip and check the exact
-bytes it receives, so **the tests never need real hardware**. They must never open
+tests talk to a pseudo-terminal that behaves like a CH9329 chip, or like a board
+running kvmd's HID firmware, and check the exact bytes it receives, so **the tests
+never need real hardware**. They must never open
 a real serial device on your machine.
 
 The UI tests use Playwright, and skip themselves if it or a browser isn't installed:

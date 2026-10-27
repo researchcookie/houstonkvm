@@ -116,9 +116,9 @@ private:
 
     // Last frame handed to the broadcaster/publisher, and when — for the
     // same-frame dedup check in handleFrame(). Only ever touched from the
-    // capture thread (handleFrame is that thread's callback, and
-    // doApplySettings only replaces capture_ after the old capture thread
-    // has already been joined), so neither needs locking of its own.
+    // capture thread (handleFrame is that thread's callback; doApplySettings
+    // and the destructor join the capture thread before touching or freeing
+    // these), so neither needs locking of its own.
     std::vector<uint8_t>                 lastFrame_;
     std::chrono::steady_clock::time_point lastSentTime_;
 

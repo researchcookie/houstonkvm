@@ -197,12 +197,20 @@ function selectedInputMethod() {
 
 function syncInputMethodFields() {
   const m = selectedInputMethod();
-  setShown(document.getElementById('t-serial-fields'), m === 'serial');
+  setShown(document.getElementById('t-serial-fields'), m === 'serial' || m === 'kvmd');
   setShown(document.getElementById('t-qemu-fields'), m === 'qemu');
   setShown(document.getElementById('t-gadget-note'), m === 'gadget');
 }
-for (const id of ['t-in-serial', 't-in-qemu', 't-in-gadget'])
+for (const id of ['t-in-serial', 't-in-kvmd', 't-in-qemu', 't-in-gadget'])
   document.getElementById(id).addEventListener('change', syncInputMethodFields);
+
+// Picking a kind of serial adapter picks its usual speed: a CH9329 ships at
+// 9600, and kvmd's HID firmware is built for 115200.
+const ADAPTER_BAUD = {serial: 9600, kvmd: 115200};
+for (const id of ['t-in-serial', 't-in-kvmd'])
+  document.getElementById(id).addEventListener('change', () => {
+    document.getElementById('t-baud').value = String(ADAPTER_BAUD[selectedInputMethod()]);
+  });
 
 // Group: snap to an existing group's spelling as you leave the field, the
 // same rule the server applies — so "rack 3" never becomes a second group.
@@ -274,7 +282,8 @@ async function openTargetEditor(t) {
   // target, so it's offered only if nobody else has it.
   const gadgetTaken = adminTargets.some(o => o.id !== editingId && o.config &&
                                              !o.config.serial_device && !o.config.qmp_socket);
-  const method = !cfg ? 'serial' : cfg.qmp_socket ? 'qemu' : cfg.serial_device ? 'serial' : 'gadget';
+  const method = !cfg ? 'serial' : cfg.qmp_socket ? 'qemu'
+    : cfg.serial_device ? (cfg.serial_adapter === 'kvmd-hid' ? 'kvmd' : 'serial') : 'gadget';
   document.getElementById('t-in-gadget').disabled = gadgetTaken && method !== 'gadget';
   document.getElementById('t-in-' + method).checked = true;
   syncInputMethodFields();
@@ -335,10 +344,11 @@ document.getElementById('form-target').addEventListener('submit', async e => {
 
   const method = selectedInputMethod();
   const video = deviceValue('t-video', 't-video-custom');
-  const serial = method === 'serial' ? deviceValue('t-serial', 't-serial-custom') : '';
+  const serialMethod = method === 'serial' || method === 'kvmd';
+  const serial = serialMethod ? deviceValue('t-serial', 't-serial-custom') : '';
   const qmp = method === 'qemu' ? document.getElementById('t-qmp').value.trim() : '';
   if (!video) { setAlert('t-err-box', 't-err', 'Choose a capture device.'); return; }
-  if (method === 'serial' && !serial) { setAlert('t-err-box', 't-err', 'Choose the serial device the CH9329 is on.'); return; }
+  if (serialMethod && !serial) { setAlert('t-err-box', 't-err', 'Choose the serial device the adapter is on.'); return; }
   if (method === 'qemu' && !qmp) { setAlert('t-err-box', 't-err', 'Enter the QEMU QMP socket path.'); return; }
 
   const mode = targetModePicker.read();
@@ -352,6 +362,7 @@ document.getElementById('form-target').addEventListener('submit', async e => {
     capture_width: mode.width, capture_height: mode.height, capture_fps: mode.fps,
     serial_device: serial,
     serial_baud: parseInt(document.getElementById('t-baud').value, 10) || 9600,
+    serial_adapter: method === 'kvmd' ? 'kvmd-hid' : 'ch9329',
     qmp_socket: qmp,
     webrtc_bitrate_kbps: parseInt(document.getElementById('t-bitrate').value, 10),
     audio_device: document.getElementById('t-audio').value

@@ -45,6 +45,12 @@ Security is your responsibility. HoustonKVM gives whoever controls it
   ```
 
 - **Never expose HoustonKVM to the open Internet.** Always keep it on a trusted network or behind a VPN.
+- **Choose keyboard and mouse hardware you trust.** Whatever is plugged into a
+  machine as its keyboard can type anything into it. A CH9329's firmware is closed,
+  and nobody outside its maker can check what it does. If that matters to you, use
+  a Raspberry Pi Pico or Arduino running kvmd's open-source HID firmware instead,
+  which you can read and build yourself
+  ([install.md](install.md#keyboard-and-mouse-with-open-source-firmware)).
 - **Sign-in is rate limited per source address**, five failures locking that address
   out for five minutes. Behind a proxy, name it with `--trusted-proxy` so each
   visitor's own address (from `X-Forwarded-For`) is the one counted; otherwise every

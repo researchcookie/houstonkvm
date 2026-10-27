@@ -1,6 +1,7 @@
 #include "video/stream_manager.h"
 
 #include "hid/ch9329_inject.h"
+#include "hid/kvmd_hid_inject.h"
 #include "hid/input_inject.h"
 #include "hid/qemu_inject.h"
 #ifdef HOUSTONKVM_SYNTHETIC_CAPTURE
@@ -55,6 +56,21 @@ StreamManager::~StreamManager() {
     }
     queueCv_.notify_one();
     if (worker_.joinable()) worker_.join();
+
+    // The capture and sound threads call back into this object (handleFrame
+    // writes lastFrame_ and the members after it), so they are stopped here,
+    // before any member is destroyed. Left to declaration order, lastFrame_
+    // would be freed while the capture thread was still writing into it.
+    // Joined without mutex_ held, since both callbacks lock it.
+    std::unique_ptr<CaptureSource> capture;
+    std::unique_ptr<AudioCapture>  audio;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        capture = std::move(capture_);
+        audio   = std::move(audio_);
+    }
+    capture.reset();
+    audio.reset();
 }
 
 void StreamManager::applySettings(Database::TargetSettings settings) {
@@ -139,11 +155,34 @@ void StreamManager::doApplySettings(const Database::TargetSettings& settings) {
         sfu_, roomId_, peerId_, settings.captureFps, settings.webrtcBitrateKbps);
     sfu_.setBitrateKbps(static_cast<int>(settings.webrtcBitrateKbps));
 
-    // 3. Rebuild the input backend. Precedence: QEMU QMP socket, then
-    // CH9329 serial, then the local USB-HID-gadget fallback.
+    // 3. Rebuild the input backend. The old one is closed first: the new one
+    // often opens the same serial device, and two backends on one tty share
+    // its line speed and its input, so the old watchdog could reset the
+    // speed or swallow a reply under the new one. Closing it outside mutex_
+    // matters too, since that joins its watchdog, which can be mid-probe.
+    // InputQueue's worker may still be inside a call on it; it lets go when
+    // that call returns. Until the new one is in place there is no backend,
+    // and input is reported unavailable.
+    {
+        std::shared_ptr<InputBackend> oldInput;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            oldInput = std::move(input_);
+        }
+        std::weak_ptr<InputBackend> closing = oldInput;
+        oldInput.reset();
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!closing.expired() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    // Precedence: QEMU QMP socket, then the serial adapter (a CH9329, or
+    // kvmd's HID firmware), then the local USB-HID-gadget fallback.
     std::unique_ptr<InputBackend> newInput;
     if (!settings.qmpSocket.empty())
         newInput = std::make_unique<QemuInject>(settings.qmpSocket);
+    else if (!settings.serialDevice.empty() && settings.serialAdapter == "kvmd-hid")
+        newInput = std::make_unique<KvmdHidInject>(settings.serialDevice, settings.serialBaud);
     else if (!settings.serialDevice.empty())
         newInput = std::make_unique<Ch9329Inject>(settings.serialDevice, settings.serialBaud);
     else
@@ -159,16 +198,12 @@ void StreamManager::doApplySettings(const Database::TargetSettings& settings) {
             if (sfuPublisher_) sfuPublisher_->onAudioFrame(opus, size, captured);
         });
 
-    // The old backend is closed outside mutex_: closing a CH9329 joins its
-    // watchdog, which can be mid-probe (see the class comment).
-    std::shared_ptr<InputBackend> oldInput;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         sfuPublisher_ = std::move(newPublisher);
-        oldInput      = std::exchange(input_, std::move(newInput));
+        input_        = std::move(newInput);
         audio_        = std::move(newAudio);
     }
-    oldInput.reset();
 
     // 4. Rebuild the capture device last. Failure here is non-fatal:
     // input and the rest of the target still work, snapshot/stream return

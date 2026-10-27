@@ -347,6 +347,13 @@ void Database::migrate() {
         mustExecute("PRAGMA user_version = 10");
         mustExecute("COMMIT");
     }
+    if (version < 11) {
+        // What's on the other end of a target's serial device: a CH9329, as
+        // every serial target before this was, or a board running kvmd's
+        // open-source HID firmware (hid/kvmd_hid_inject.h).
+        mustExecute("ALTER TABLE targets ADD COLUMN serial_adapter TEXT NOT NULL DEFAULT 'ch9329'");
+        mustExecute("PRAGMA user_version = 11");
+    }
 }
 
 namespace {
@@ -354,7 +361,8 @@ namespace {
 constexpr const char* kTargetColumns =
     "t.id, t.name, t.description, t.group_name, t.enabled, t.is_default, "
     "t.v4l2_device, t.capture_width, t.capture_height, t.capture_fps, "
-    "t.qmp_socket, t.serial_device, t.serial_baud, t.webrtc_bitrate_kbps, t.audio_device";
+    "t.qmp_socket, t.serial_device, t.serial_baud, t.webrtc_bitrate_kbps, t.audio_device, "
+    "t.serial_adapter";
 
 Database::Target rowToTarget(const Stmt& s) {
     Database::Target t;
@@ -373,6 +381,7 @@ Database::Target rowToTarget(const Stmt& s) {
     t.settings.serialBaud        = s.column_int(12);
     t.settings.webrtcBitrateKbps = static_cast<uint32_t>(s.column_int(13));
     t.settings.audioDevice       = s.column_text(14);
+    t.settings.serialAdapter     = s.column_text(15);
     return t;
 }
 
@@ -517,8 +526,8 @@ int64_t Database::createTarget(const Target& target, DbOutcome* outcome) {
             INSERT INTO targets
                 (name, description, group_name, enabled, is_default, v4l2_device,
                  capture_width, capture_height, capture_fps, qmp_socket, serial_device,
-                 serial_baud, webrtc_bitrate_kbps, audio_device)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 serial_baud, webrtc_bitrate_kbps, audio_device, serial_adapter)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         )");
         const auto& cfg = target.settings;
         s.bind(1, target.name)
@@ -534,7 +543,8 @@ int64_t Database::createTarget(const Target& target, DbOutcome* outcome) {
          .bind(11, cfg.serialDevice)
          .bind(12, cfg.serialBaud)
          .bind(13, static_cast<int>(cfg.webrtcBitrateKbps))
-         .bind(14, cfg.audioDevice);
+         .bind(14, cfg.audioDevice)
+         .bind(15, cfg.serialAdapter);
         if (s.step() == Stmt::StepResult::Error) {
             copyOutcome(s, outcome);
             if (!s.outcome().isConstraintViolation()) reportFailure("createTarget", s);
@@ -568,7 +578,7 @@ bool Database::updateTarget(const Target& target, DbOutcome* outcome) {
                 is_default = CASE WHEN ? THEN 1 ELSE is_default END,
                 v4l2_device = ?, capture_width = ?, capture_height = ?, capture_fps = ?,
                 qmp_socket = ?, serial_device = ?, serial_baud = ?, webrtc_bitrate_kbps = ?,
-                audio_device = ?, updated_at = datetime('now')
+                audio_device = ?, serial_adapter = ?, updated_at = datetime('now')
             WHERE id = ?
         )");
         const auto& cfg = target.settings;
@@ -586,7 +596,8 @@ bool Database::updateTarget(const Target& target, DbOutcome* outcome) {
          .bind(12, cfg.serialBaud)
          .bind(13, static_cast<int>(cfg.webrtcBitrateKbps))
          .bind(14, cfg.audioDevice)
-         .bind(15, static_cast<sqlite3_int64>(target.id));
+         .bind(15, cfg.serialAdapter)
+         .bind(16, static_cast<sqlite3_int64>(target.id));
         if (s.step() == Stmt::StepResult::Error) {
             copyOutcome(s, outcome);
             if (!s.outcome().isConstraintViolation()) reportFailure("updateTarget", s);

@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ui_harness import (KEY_A, KEY_B, KEY_C, KEY_7, OWNER, PASSWORD, TestCA, UITestCase, expect, free_port,
                         wait_until)
+from test_kvmd_hid import FakeBoard  # noqa: E402  (ui_harness puts tests/integration on the path)
 
 
 def key_frames(chip):
@@ -950,6 +951,35 @@ class TestAdmin(UITestCase):
         q.fill("#targets-search", "ci runner")
         expect(q.locator(".target-card")).to_have_count(1)
         self.assert_no_unexpected_errors(bp)
+
+    def test_owner_wires_a_kvmd_hid_board_through_the_form(self):
+        board = FakeBoard()
+        self.addCleanup(board.close)
+        bp = self.admin()
+        p = bp.page
+        self.fill_new_target(p, "Pico Box", board)
+        p.check("#t-in-kvmd")
+        expect(p.locator("#t-serial-fields")).to_be_visible()
+        expect(p.locator("#t-baud")).to_have_value("115200")   # its usual speed, picked for you
+        p.click("#t-save")
+        expect(p.locator("#admin-targets-msg")).to_contain_text("Pico Box saved")
+        made = next(t for t in self.owner.as_json(self.owner.get("/api/targets")[1])["targets"]
+                    if t["name"] == "Pico Box")
+        cfg = made["config"]
+        self.assertEqual((cfg["serial_adapter"], cfg["serial_baud"], cfg["serial_device"]),
+                         ("kvmd-hid", 115200, board.path))
+
+        # Reopened, it shows as what it is, and so does its health.
+        p.get_by_role("button", name="Edit Pico Box").click()
+        expect(p.locator("#t-in-kvmd")).to_be_checked()
+        p.click("#t-cancel")
+        self.wait_input_ready(made["id"])
+        p.goto(f"{self.base}/#/targets/{made['id']}")
+        p.click("#health-btn")
+        expect(p.locator("#health-facts")).to_contain_text("kvmd’s HID firmware")
+        expect(p.locator("#health-summary")).to_contain_text("Board and target link OK", timeout=15000)
+        self.assert_no_unexpected_errors(bp)
+        self.owner.delete(f"/api/targets/{made['id']}")
 
     def test_a_duplicate_name_is_reported_and_nothing_is_lost(self):
         chip = self.new_chip()

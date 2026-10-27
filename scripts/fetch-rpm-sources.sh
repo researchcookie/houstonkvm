@@ -9,13 +9,13 @@
 #
 # Usage:
 #   bash scripts/fetch-rpm-sources.sh [SOURCEDIR] [VERSION]
-#   (defaults: SOURCEDIR=~/rpmbuild/SOURCES, VERSION=0.1.4 — must match
+#   (defaults: SOURCEDIR=~/rpmbuild/SOURCES, VERSION=0.2.0 — must match
 #   houstonkvm.spec's Version: field)
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
 SOURCEDIR="${1:-$HOME/rpmbuild/SOURCES}"
-VERSION="${2:-0.1.4}"
+VERSION="${2:-0.2.0}"
 
 GREEN='\033[0;32m'; NC='\033[0m'
 step() { echo -e "\n${GREEN}==> $*${NC}"; }

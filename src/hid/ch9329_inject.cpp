@@ -1,5 +1,7 @@
 #include "hid/ch9329_inject.h"
 
+#include "hid/serial_link.h"
+
 #include <fcntl.h>
 #include <poll.h>
 #include <termios.h>
@@ -92,54 +94,6 @@ std::pair<HealthState, std::string> classifyLink(const LinkFacts& f) {
     return {HealthState::Good, "Adapter and target link OK."};
 }
 
-// A CH9329 packet is a handful of bytes — normally well within the kernel
-// tty output buffer even under load. But clicks and keys go out as
-// back-to-back redundant reports, and fd_ is O_NONBLOCK, so at low baud
-// rates a write can still come back EAGAIN/short. This
-// retries only for local buffer space to free up (poll for POLLOUT) — never
-// for the chip/target to respond, so it doesn't reintroduce the round-trip
-// ACK-wait latency sendCommand() deliberately avoids (see its declaration).
-// Bounded to ~30ms total so one stuck write can't stall the worker thread.
-bool writeAllRetrying(int fd, const uint8_t* data, size_t len) {
-    size_t sent     = 0;
-    auto   deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(30);
-    while (sent < len) {
-        ssize_t n = write(fd, data + sent, len - sent);
-        if (n > 0) {
-            sent += static_cast<size_t>(n);
-            continue;
-        }
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            auto remaining = deadline - std::chrono::steady_clock::now();
-            auto remainingMs =
-                std::chrono::duration_cast<std::chrono::milliseconds>(remaining).count();
-            if (remainingMs <= 0) return false;
-            pollfd pfd{fd, POLLOUT, 0};
-            if (poll(&pfd, 1, static_cast<int>(remainingMs)) <= 0) return false;
-            continue;
-        }
-        return false; // real error (device gone, etc.) — not retryable
-    }
-    return true;
-}
-
-speed_t baudToSpeed(int baudRate) {
-    switch (baudRate) {
-        case 1200:   return B1200;
-        case 2400:   return B2400;
-        case 4800:   return B4800;
-        case 9600:   return B9600;
-        case 19200:  return B19200;
-        case 38400:  return B38400;
-        case 57600:  return B57600;
-        case 115200: return B115200;
-        default:
-            std::cerr << "Ch9329Inject: unsupported baud rate " << baudRate
-                      << ", defaulting to 9600\n";
-            return B9600;
-    }
-}
-
 } // namespace
 
 Ch9329Inject::Ch9329Inject(const std::string& serialDevice, int baudRate)
@@ -177,47 +131,16 @@ bool Ch9329Inject::isReady() const {
 }
 
 bool Ch9329Inject::setSpeedLocked(int baud) {
-    termios tty{};
-    if (tcgetattr(fd_, &tty) != 0) return false;
-    speed_t speed = baudToSpeed(baud);
-    cfsetispeed(&tty, speed);
-    cfsetospeed(&tty, speed);
-    return tcsetattr(fd_, TCSANOW, &tty) == 0;
+    return setSerialSpeed(fd_, baud);
 }
 
 bool Ch9329Inject::openSerialLocked() {
-    fd_ = open(device_.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+    std::string error;
+    fd_ = openRawSerial(device_, baudRate_, error);
     if (fd_ < 0) {
-        std::cerr << "Ch9329Inject: cannot open " << device_ << ": "
-                  << strerror(errno) << "\n";
+        std::cerr << "Ch9329Inject: " << error << "\n";
         return false;
     }
-
-    termios tty{};
-    if (tcgetattr(fd_, &tty) != 0) {
-        std::cerr << "Ch9329Inject: tcgetattr failed: " << strerror(errno) << "\n";
-        close(fd_); fd_ = -1; return false;
-    }
-
-    speed_t speed = baudToSpeed(baudRate_);
-    cfsetispeed(&tty, speed);
-    cfsetospeed(&tty, speed);
-
-    cfmakeraw(&tty);
-    tty.c_cflag |= (CLOCAL | CREAD);
-    tty.c_cflag &= ~PARENB;   // no parity
-    tty.c_cflag &= ~CSTOPB;   // 1 stop bit
-    tty.c_cflag &= ~CSIZE;
-    tty.c_cflag |= CS8;       // 8 data bits
-    tty.c_cflag &= ~CRTSCTS;  // no hardware flow control
-    tty.c_cc[VMIN]  = 0;
-    tty.c_cc[VTIME] = 0;
-
-    if (tcsetattr(fd_, TCSANOW, &tty) != 0) {
-        std::cerr << "Ch9329Inject: tcsetattr failed: " << strerror(errno) << "\n";
-        close(fd_); fd_ = -1; return false;
-    }
-    tcflush(fd_, TCIOFLUSH);
 
     loggedDropWhileDown_ = false;
     deviceOpen_ = true;
@@ -354,6 +277,7 @@ bool Ch9329Inject::probeAliveLocked(bool record) {
 std::optional<int> Ch9329Inject::scanBaudLocked() {
     std::optional<int> found;
     for (int baud : {9600, 115200, 57600, 38400, 19200, 4800, 2400, 1200}) {
+        if (!running_.load()) break;   // being closed: don't hold it up
         if (baud == baudRate_ || !setSpeedLocked(baud)) continue;
         if (requestLocked(CMD_GET_INFO, std::chrono::milliseconds(300))) {
             found = baud;
