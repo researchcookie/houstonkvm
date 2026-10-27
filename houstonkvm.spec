@@ -3,7 +3,7 @@
 # video, install Cisco's openh264 (epel-cisco-openh264) on the server.
 
 Name:           houstonkvm
-Version:        0.2.0
+Version:        0.2.1
 Release:        1%{?dist}
 Summary:        Self-hosted multi-user IP-KVM server
 
@@ -199,6 +199,10 @@ HOUSTONKVM_BINARY=%{_vpath_builddir}/HoustonKVM \
 %systemd_postun_with_restart houstonkvm.service
 
 %changelog
+* Mon Oct 26 2026 Laszlo Coleman <laszlo.coleman@researchcookie.com> - 0.2.1-1
+- JSON logs stay JSON when GLib warns: with EPEL's libdatachannel 0.23 on
+  EL9, a GLib warning per WebRTC connection was written as plain text.
+
 * Mon Oct 26 2026 Laszlo Coleman <laszlo.coleman@researchcookie.com> - 0.2.0-1
 - Keyboard and mouse through a board running kvmd's open-source HID
   firmware, as a second kind of serial adapter beside the CH9329.
@@ -209,7 +213,7 @@ HOUSTONKVM_BINARY=%{_vpath_builddir}/HoustonKVM \
 - The QMP backend gives up on a socket that never completes its handshake.
 - 14400 baud is no longer offered for serial adapters.
 
-* Mon Oct 13 2026 Laszlo Coleman <laszlo.coleman@researchcookie.com> - 0.1.4-1
+* Tue Oct 13 2026 Laszlo Coleman <laszlo.coleman@researchcookie.com> - 0.1.4-1
 - Reject an over-limit request body once with 413 and stop, instead of
   letting the rest of a split body reach the route handler afterwards.
 

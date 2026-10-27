@@ -10,7 +10,8 @@ namespace houston_kvm {
 // stdout lines are "info" and stderr lines "warning". `component` is the
 // "Name: " prefix most messages start with, when there is one. Lines are
 // assembled per thread, so two threads writing at once never interleave
-// within a line. Call once, before any other thread starts.
+// within a line. GLib's warnings, when a library brings GLib in, are sent
+// through std::cerr too. Call once, before any other thread starts.
 void enableJsonLogs();
 
 } // namespace houston_kvm

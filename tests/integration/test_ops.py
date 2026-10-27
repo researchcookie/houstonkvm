@@ -200,7 +200,10 @@ class TestJsonLogs(unittest.TestCase):
         lines = [l for l in server.output if l.strip()]
         self.assertTrue(lines)
         for line in lines:
-            entry = json.loads(line)
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                self.fail(f"not a JSON object: {line!r}")
             self.assertEqual(set(entry) - {"component"}, {"ts", "level", "msg"}, line)
             self.assertRegex(entry["ts"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")
             self.assertIn(entry["level"], ("info", "warning"))

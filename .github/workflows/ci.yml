@@ -38,7 +38,7 @@ jobs:
       - name: Build and test
         run: rpmbuild -ba houstonkvm.spec
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: rpms
           path: |

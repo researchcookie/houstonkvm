@@ -4,6 +4,15 @@ What changed in each release of HoustonKVM. Versions follow
 [Semantic Versioning](https://semver.org/); while the version is 0.x, a minor
 release can change behaviour.
 
+## 0.2.1 (2026-10-26)
+
+- With `--log-format=json`, every line is JSON again on EL9. EPEL's
+  libdatachannel 0.23 makes GLib print a warning as each WebRTC connection
+  is set up, and GLib wrote it to the log as plain text; it now comes out as
+  a JSON line with GLib's domain as its `component`. This also kept 0.2.0's
+  EL9 package from building, so 0.2.1 is the first 0.2 release with
+  packages.
+
 ## 0.2.0 (2026-10-26)
 
 - A second kind of keyboard and mouse adapter: a Raspberry Pi Pico, an Arduino
