@@ -25,6 +25,8 @@ function statusTags(t) {
   else if (!t.status.input_ready) tags.push({text: 'View only', kind: 'off'});
   // Working, but it failed recently: worth a look before it gets worse.
   if (t.status.input_health === 'degraded') tags.push({text: 'Input flaky', kind: 'warn'});
+  // So a pointer that moves by itself now and then surprises nobody.
+  if (t.mouse_jiggler) tags.push({text: 'Mouse jiggler on', kind: 'off'});
   return tags;
 }
 

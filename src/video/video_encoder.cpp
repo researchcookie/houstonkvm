@@ -38,6 +38,18 @@ void rgbToI420(const uint8_t* rgb, int width, int height,
     }
 }
 
+// 4:2:2 chroma (full height) to 4:2:0's: each pair of rows averaged into
+// one, which also puts it where H.264 expects it, between the two.
+void halveChromaRows(const uint8_t* src, uint8_t* dst, size_t width, size_t height) {
+    for (size_t j = 0; j < (height + 1) / 2; ++j) {
+        const uint8_t* a = src + 2 * j * width;
+        const uint8_t* b = src + std::min(2 * j + 1, height - 1) * width;
+        uint8_t* out = dst + j * width;
+        for (size_t i = 0; i < width; ++i)
+            out[i] = static_cast<uint8_t>((a[i] + b[i] + 1) >> 1);
+    }
+}
+
 // Software H.264 (Cisco's OpenH264), after decoding the JPEG with
 // libjpeg-turbo.
 struct OpenH264Encoder final : VideoEncoder {
@@ -50,6 +62,11 @@ struct OpenH264Encoder final : VideoEncoder {
     int64_t      frameIndex = 0;
     std::vector<uint8_t> yuvBuf;
     std::vector<uint8_t> nalBuf; // scratch buffer for concatenating encoded layers
+    // Decoding scratch: 4:2:2 chroma planes, or RGB for other subsamplings.
+    std::vector<uint8_t> chromaBuf;
+    std::vector<uint8_t> rgbBuf;
+    // The JPEG whose picture yuvBuf holds; empty when it holds none.
+    std::vector<uint8_t> lastJpeg;
 
     OpenH264Encoder(uint32_t fps_, uint32_t bitrateKbps_)
         : tj(tjInitDecompress()), fps(fps_), bitrateKbps(bitrateKbps_) {
@@ -118,54 +135,85 @@ struct OpenH264Encoder final : VideoEncoder {
         yuvBuf.assign(static_cast<size_t>(width) * height + 2 * cw * ch, 0);
     }
 
+    // The JPEG's picture into yuvBuf as I420. False (and nothing held) for a
+    // malformed frame.
+    bool decode(const uint8_t* jpegData, size_t jpegSize);
+
     const char* name() const override { return "OpenH264"; }
     void encode(const uint8_t* jpegData, size_t jpegSize, const EncodedCb& onNal) override;
     void forceKeyframe() override;
 };
 
-void OpenH264Encoder::encode(const uint8_t* jpegData, size_t jpegSize,
-                             const EncodedCb& onNal) {
-    int width = 0, height = 0, subsamp = 0, colorspace = 0;
-    if (tjDecompressHeader3(tj, const_cast<unsigned char*>(jpegData),
-                             static_cast<unsigned long>(jpegSize),
-                             &width, &height, &subsamp, &colorspace) != 0)
-        return; // malformed frame, drop
-    if (width <= 0 || height <= 0) return;
+bool OpenH264Encoder::decode(const uint8_t* jpegData, size_t jpegSize) {
+    auto* jpeg = const_cast<unsigned char*>(jpegData);
+    auto  size = static_cast<unsigned long>(jpegSize);
+    int w = 0, h = 0, subsamp = 0, colorspace = 0;
+    if (tjDecompressHeader3(tj, jpeg, size, &w, &h, &subsamp, &colorspace) != 0) return false;
+    if (w <= 0 || h <= 0) return false;
 
-    ensureEncoder(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+    ensureEncoder(static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+    lastJpeg.clear();   // yuvBuf is about to be overwritten
 
-    size_t ySize = static_cast<size_t>(width) * height;
-    size_t cw = (static_cast<size_t>(width) + 1) / 2;
-    size_t ch = (static_cast<size_t>(height) + 1) / 2;
-    size_t cSize = cw * ch;
+    size_t cw = (static_cast<size_t>(w) + 1) / 2;
+    size_t ch = (static_cast<size_t>(h) + 1) / 2;
     uint8_t* yPlane = yuvBuf.data();
-    uint8_t* uPlane = yPlane + ySize;
-    uint8_t* vPlane = uPlane + cSize;
+    uint8_t* uPlane = yPlane + static_cast<size_t>(w) * h;
+    uint8_t* vPlane = uPlane + cw * ch;
+    int strides[3] = {w, static_cast<int>(cw), static_cast<int>(cw)};
 
+    // Decoded straight to planes, a JPEG's components are taken as Y, Cb and
+    // Cr, which only YCbCr ones are; any other kind goes through RGB below.
+    const bool ycbcr = colorspace == TJCS_YCbCr;
     bool ok = false;
-    if (subsamp == TJSAMP_420) {
+    if (ycbcr && subsamp == TJSAMP_420) {
         unsigned char* planes[3] = {yPlane, uPlane, vPlane};
-        int strides[3] = {width, static_cast<int>(cw), static_cast<int>(cw)};
-        ok = tjDecompressToYUVPlanes(
-                 tj, const_cast<unsigned char*>(jpegData),
-                 static_cast<unsigned long>(jpegSize),
-                 planes, width, strides, height, 0) == 0;
+        ok = tjDecompressToYUVPlanes(tj, jpeg, size, planes, w, strides, h, 0) == 0;
+    } else if (ycbcr && subsamp == TJSAMP_422) {
+        // What most capture cards send. Its own planes, then the chroma
+        // halved, costs a third less than the way through RGB below.
+        chromaBuf.resize(2 * cw * static_cast<size_t>(h));
+        uint8_t* u422 = chromaBuf.data();
+        uint8_t* v422 = u422 + cw * static_cast<size_t>(h);
+        unsigned char* planes[3] = {yPlane, u422, v422};
+        ok = tjDecompressToYUVPlanes(tj, jpeg, size, planes, w, strides, h, 0) == 0;
+        if (ok) {
+            halveChromaRows(u422, uPlane, cw, static_cast<size_t>(h));
+            halveChromaRows(v422, vPlane, cw, static_cast<size_t>(h));
+        }
     }
     if (!ok) {
-        std::vector<uint8_t> rgb(static_cast<size_t>(width) * height * 3);
-        if (tjDecompress2(tj, const_cast<unsigned char*>(jpegData),
-                           static_cast<unsigned long>(jpegSize),
-                           rgb.data(), width, 0, height, TJPF_RGB, 0) != 0)
-            return; // malformed frame, drop
-        rgbToI420(rgb.data(), width, height, yPlane, uPlane, vPlane, cw);
+        rgbBuf.resize(static_cast<size_t>(w) * h * 3);
+        if (tjDecompress2(tj, jpeg, size, rgbBuf.data(), w, 0, h, TJPF_RGB, 0) != 0)
+            return false;
+        rgbToI420(rgbBuf.data(), w, h, yPlane, uPlane, vPlane, cw);
+    } else if (!rgbBuf.empty()) {
+        // Kept while frames keep needing it; one odd frame's isn't (6 MB at 1080p).
+        std::vector<uint8_t>().swap(rgbBuf);
     }
+    lastJpeg.assign(jpegData, jpegData + jpegSize);
+    return true;
+}
+
+void OpenH264Encoder::encode(const uint8_t* jpegData, size_t jpegSize,
+                             const EncodedCb& onNal) {
+    // A still screen comes from a capture card as the same JPEG, byte for
+    // byte, frame after frame. Its picture is in yuvBuf already, so only the
+    // encoder runs, for a near-empty frame: decoding is most of the cost.
+    const bool unchanged = !lastJpeg.empty() && jpegSize == lastJpeg.size() &&
+                           std::memcmp(jpegData, lastJpeg.data(), jpegSize) == 0;
+    if (!unchanged && !decode(jpegData, jpegSize)) return; // malformed frame, drop
+
+    const size_t cw = (static_cast<size_t>(width) + 1) / 2;
+    uint8_t* yPlane = yuvBuf.data();
+    uint8_t* uPlane = yPlane + static_cast<size_t>(width) * height;
+    uint8_t* vPlane = uPlane + cw * ((static_cast<size_t>(height) + 1) / 2);
 
     SSourcePicture pic;
     std::memset(&pic, 0, sizeof(pic));
-    pic.iPicWidth   = width;
-    pic.iPicHeight  = height;
+    pic.iPicWidth   = static_cast<int>(width);
+    pic.iPicHeight  = static_cast<int>(height);
     pic.iColorFormat = videoFormatI420;
-    pic.iStride[0]  = width;
+    pic.iStride[0]  = static_cast<int>(width);
     pic.iStride[1]  = static_cast<int>(cw);
     pic.iStride[2]  = static_cast<int>(cw);
     pic.pData[0]    = yPlane;

@@ -61,12 +61,14 @@ def wait_until(predicate, timeout=10, what="condition"):
 class BrowserPage:
     """One browser context: a page plus everything it complained about."""
 
-    def __init__(self, browser, base, width=1280, height=850, bypass_csp=False, ignore_https_errors=False):
+    def __init__(self, browser, base, width=1280, height=850, bypass_csp=False, ignore_https_errors=False,
+                 user_agent=None):
         self.base = base
         # ignore_https_errors: like clicking past the browser's warning about
         # a certificate it doesn't trust (HoustonKVM's own CA, untrusted here).
         self.context = browser.new_context(viewport={"width": width, "height": height},
-                                           bypass_csp=bypass_csp, ignore_https_errors=ignore_https_errors)
+                                           bypass_csp=bypass_csp, ignore_https_errors=ignore_https_errors,
+                                           user_agent=user_agent)
         self.page = self.context.new_page()
         self.errors = []
         self.page.on("pageerror", lambda e: self.errors.append(f"PAGEERROR: {e}"))
@@ -195,8 +197,8 @@ class UITestCase(unittest.TestCase):
 
     # -- browser ---------------------------------------------------------
     def open(self, user=None, password=PASSWORD, width=1280, height=850, bypass_csp=False,
-             ignore_https_errors=False):
-        bp = BrowserPage(self.browser, self.base, width, height, bypass_csp, ignore_https_errors)
+             ignore_https_errors=False, user_agent=None):
+        bp = BrowserPage(self.browser, self.base, width, height, bypass_csp, ignore_https_errors, user_agent)
         self.addCleanup(bp.context.close)
         if user:
             bp.sign_in(user, password)

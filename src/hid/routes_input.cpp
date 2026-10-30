@@ -266,6 +266,39 @@ auto socketBehavior = [&auth, &db, &targets, runningTarget](bool scoped) {
     };
 };
 
+// The mouse jiggler, per target (see InputQueue::setJiggler). Operator and
+// Owner, like the video settings: it acts on the machine for whoever uses it
+// next, whoever drives now. Turning it on or off never touches the capture or
+// the input link.
+auto inputSettingsGet = [&auth, &db, &targets](bool scoped) {
+    return [&auth, &db, &targets, scoped](auto* res, auto* req) {
+        if (!requireBrowserRole(auth, db, res, req, Role::Operator)) return;
+        auto target = resolveTargetRow(targets, db, res, req, scoped);
+        if (!target) return;
+        res->writeHeader("Content-Type", "application/json")
+           ->end(json{{"mouse_jiggler", target->mouseJiggler}}.dump());
+    };
+};
+
+auto inputSettingsPut = [&auth, &db, &targets, &events](bool scoped) {
+    return [&auth, &db, &targets, &events, scoped](auto* res, auto* req) {
+        auto authOpt = requireBrowserRole(auth, db, res, req, Role::Operator);
+        if (!authOpt) return;
+        auto id = resolveTargetId(targets, res, req, scoped); // before the body arrives
+        if (!id) return;
+        Actor actor = actorOf(*authOpt, clientAddress(auth.policy, res, req));
+
+        updateTargetFields(res, *id, db, targets, events, std::move(actor), event::kInputSettings,
+                           [](const json& j, Database::Target& target) -> std::string {
+            auto jiggler = j.is_object() ? jsonValueOr(j, "mouse_jiggler", target.mouseJiggler)
+                                         : std::nullopt;
+            if (!jiggler) return "Invalid field types";
+            target.mouseJiggler = *jiggler;
+            return "";
+        });
+    };
+};
+
 app.post("/api/control/acquire", acquire(false))
    .post("/api/targets/:id/control/acquire", acquire(true))
    .post("/api/control/release", release(false))
@@ -274,6 +307,10 @@ app.post("/api/control/acquire", acquire(false))
    .get("/api/targets/:id/control/status", status(true))
    .post("/api/input", input(false))
    .post("/api/targets/:id/input", input(true))
+   .get("/api/input/settings", inputSettingsGet(false))
+   .get("/api/targets/:id/input/settings", inputSettingsGet(true))
+   .put("/api/input/settings", inputSettingsPut(false))
+   .put("/api/targets/:id/input/settings", inputSettingsPut(true))
    .template ws<InputSocketData>("/api/input/ws", socketBehavior(false))
    .template ws<InputSocketData>("/api/targets/:id/input/ws", socketBehavior(true));
 

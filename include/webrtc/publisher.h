@@ -66,6 +66,18 @@ private:
     // Whether the last frame was encoded: nothing is decoded or encoded
     // while no WebRTC viewer is watching. Only touched on the worker thread.
     bool                    encoding_        = false;
+    // Whether the worker wants frames. It clears this when one finds nothing
+    // to encode it for (no viewer, or no working encoder or link), so
+    // onVideoFrame() stops copying them over, and sets it again when its
+    // check every kIdleCheck finds a viewer. Only the worker asks the SFU:
+    // onVideoFrame() runs under StreamManager's lock, which input takes
+    // too, and the SFU's lock can be held for a while. (A viewer's keyframe
+    // request can't wake it: the SFU can address one only to a stream it
+    // has had packets from.)
+    std::atomic<bool>       wanted_{true};
+    // So the first viewer waits at most this long for encoding to start;
+    // each check is a few microseconds.
+    static constexpr auto   kIdleCheck = std::chrono::milliseconds(25);
     double  encodeMsSum_       = 0;
     double  encodeMsMax_       = 0;
     int     encodeSampleCount_ = 0;

@@ -180,6 +180,10 @@
                 aria-expanded="false" aria-controls="paste-panel" hidden>Paste text</button>
         <button type="button" class="btn btn-outline toolbar-btn" id="health-btn"
                 aria-expanded="false" aria-controls="health-panel" hidden>Input health</button>
+        <!-- Server-side, so it keeps working with this tab closed: see input.js. -->
+        <button type="button" class="btn btn-outline toolbar-btn" id="jiggler-btn" aria-pressed="false"
+                title="Moves the pointer a few pixels after a minute without input, so the machine doesn’t lock or sleep"
+                hidden>Mouse jiggler</button>
         <button type="button" class="btn btn-outline toolbar-btn" id="display-btn"
                 aria-expanded="false" aria-controls="display-panel" hidden>Display</button>
         <button type="button" class="btn btn-outline toolbar-btn" id="sound-btn" hidden>Unmute</button>

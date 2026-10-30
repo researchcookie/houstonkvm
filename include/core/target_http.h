@@ -1,9 +1,13 @@
 #pragma once
 
 #include "core/http_common.h"
+#include "core/routes_targets.h"
 #include "core/target_manager.h"
 
+#include <functional>
 #include <optional>
+#include <string>
+#include <string_view>
 
 namespace houston_kvm {
 
@@ -68,6 +72,41 @@ inline std::optional<Database::Target> resolveTargetRow(TargetManager& targets, 
     auto target = db.getTarget(*id);
     if (!target) res->writeStatus("404 Not Found")->end("Unknown target");
     return target;
+}
+
+// The rest of an Operator's change to a few of a target's fields, once the
+// route has checked who is asking and which target: reads the JSON body, has
+// `applyFields` put the fields it honours on the row (a non-empty error is a
+// 400), saves it, audits what changed as `eventType` and applies it to the
+// running target. Answers {"ok":true} at once: anything slow (a rebuild)
+// happens on the target's own threads.
+template <bool SSL>
+inline void updateTargetFields(uWS::HttpResponse<SSL>* res, int64_t targetId, Database& db,
+                               TargetManager& targets, EventBus& events, Actor actor,
+                               std::string_view eventType,
+                               std::function<std::string(const json&, Database::Target&)> applyFields) {
+    readBody(res, 1024, [res, targetId, &db, &targets, &events, actor = std::move(actor), eventType,
+                         applyFields = std::move(applyFields)](std::string& body) {
+        auto j = parseJsonOr400(res, body);
+        if (!j) return;
+        auto target = db.getTarget(targetId);
+        if (!target) { res->writeStatus("404 Not Found")->end("Unknown target"); return; }
+        const Database::Target before = *target;
+        if (auto err = applyFields(*j, *target); !err.empty()) {
+            res->writeStatus("400 Bad Request")->end(err);
+            return;
+        }
+        if (!db.updateTarget(*target)) {
+            res->writeStatus("500 Internal Server Error")->end("Server error");
+            return;
+        }
+        if (auto fresh = db.getTarget(targetId)) {
+            if (auto changes = auditChanges(before, *fresh); !changes.empty())
+                emitTarget(events, eventType, actor, *fresh, {{"changes", changes}});
+            targets.apply(*fresh);
+        }
+        res->writeHeader("Content-Type", "application/json")->end(R"({"ok":true})");
+    });
 }
 
 } // namespace houston_kvm

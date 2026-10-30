@@ -67,18 +67,21 @@ std::string parseTags(const json& value, std::vector<std::string>& out) {
 }
 
 // Applies the fields present in `j` onto `t` — name/description/group/tags/
-// enabled plus the hardware fields. Sets makeDefault if "default": true.
+// enabled/mouse_jiggler plus the hardware fields. Sets makeDefault if
+// "default": true.
 std::string applyTargetFields(const json& j, Database::Target& t, bool& makeDefault) {
     auto name        = jsonValueOr(j, "name", t.name);
     auto description = jsonValueOr(j, "description", t.description);
     auto group       = jsonValueOr(j, "group", t.group);
     auto enabled     = jsonValueOr(j, "enabled", t.enabled);
-    if (!name || !description || !group || !enabled) return "Invalid field types";
+    auto jiggler     = jsonValueOr(j, "mouse_jiggler", t.mouseJiggler);
+    if (!name || !description || !group || !enabled || !jiggler) return "Invalid field types";
 
-    t.name        = trim(*name);
-    t.description = trim(*description);
-    t.group       = trim(*group);
-    t.enabled     = *enabled;
+    t.name         = trim(*name);
+    t.description  = trim(*description);
+    t.group        = trim(*group);
+    t.enabled      = *enabled;
+    t.mouseJiggler = *jiggler;
 
     if (t.name.empty() || t.name.size() > kMaxNameLen || hasControlChars(t.name))
         return "Invalid name (1-64 characters)";
@@ -113,6 +116,9 @@ json targetToJson(const Database::Target& t, TargetManager& targets, bool includ
         {"tags", t.tags},
         {"enabled", t.enabled},
         {"default", t.isDefault},
+        // For everyone who can see the target: a pointer that moves by
+        // itself now and then shouldn't surprise anyone watching.
+        {"mouse_jiggler", t.mouseJiggler},
     };
 
     // "disabled": nothing running by choice. "starting": enabled but its
@@ -242,7 +248,8 @@ std::string describeTargetConflict(const DbOutcome& outcome) {
 // What the audit log keeps about a target: everything an Owner can set.
 json auditView(const Database::Target& t) {
     json j{{"name", t.name}, {"description", t.description}, {"group", t.group},
-           {"tags", t.tags}, {"enabled", t.enabled}, {"default", t.isDefault}};
+           {"tags", t.tags}, {"enabled", t.enabled}, {"default", t.isDefault},
+           {"mouse_jiggler", t.mouseJiggler}};
     json settings = targetSettingsToJson(t.settings);   // named: items() mustn't outlive it
     for (auto& [k, v] : settings.items()) j[k] = v;
     return j;

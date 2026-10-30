@@ -134,6 +134,7 @@ $ curl -H 'Authorization: Bearer <token>' 'http://kvm.local:8080/api/targets?q=w
       "tags": ["linux", "prod"],
       "enabled": true,
       "default": false,
+      "mouse_jiggler": false,
       "state": "running",
       "status": { "capture_active": false, "video_state": "reconnecting", "controlled": false, "driver": "", "input_health": "good", "input_ready": true, "webrtc_viewers": 0, "audio_state": "idle" }
     }
@@ -150,7 +151,8 @@ is that connection's health (`good`, `degraded`, `down` or `unknown`, see
 who (the username, or `""` when nobody does). `webrtc_viewers` is how many
 people are watching over low-latency (WebRTC) video; a target only spends CPU
 on encoding it while this is above zero. `audio_state` is the target's sound
-(see [Sound](#sound)).
+(see [Sound](#sound)). `mouse_jiggler` says whether the server nudges its
+pointer now and then (see [Mouse jiggler](#mouse-jiggler)).
 
 An Owner's browser session also gets a `config` object with the hardware wiring
 (device paths, serial speed, capture mode, WebRTC bitrate, sound device). Nobody
@@ -193,7 +195,7 @@ for the gadget port and `/dev/video0`. Edit or delete it when you add your own.
 
 | Route | Role | |
 |---|---|---|
-| `GET /api/targets/:id/stream` | Viewer | MJPEG (`multipart/x-mixed-replace`). Works in an `<img>` tag. The connection stays open, and simply sends no frames while there is no picture; use `snapshot` to find out whether there is one. |
+| `GET /api/targets/:id/stream` | Viewer | MJPEG (`multipart/x-mixed-replace`), each part with a `Content-Length`. Works in an `<img>` tag; `?headers=early`, which the web UI uses in Chromium-based browsers, sends each part's boundary and headers (without `Content-Length`) right after the frame before it, because Chromium shows a part only once the next one's headers arrive. Safari shows nothing with `?headers=early`. The connection stays open, and simply sends no frames while there is no picture; use `snapshot` to find out whether there is one. |
 | `GET /api/targets/:id/snapshot` | Viewer | One JPEG. `503` while there is no picture. |
 | `GET /api/targets/:id/video/settings` | Operator, browser session | Capture mode and bitrate, and what is actually streaming now. |
 | `PUT /api/targets/:id/video/settings` | Operator, browser session | Change resolution, frame rate or bitrate (`capture_width`, `capture_height`, `capture_fps`, `webrtc_bitrate_kbps`). Rebuilds that target's capture, which pauses the picture for up to about ten seconds for everyone watching. |
@@ -292,6 +294,25 @@ control lock.
 Every stretch of control is recorded in the [audit log](#audit-log), with how
 many keys were pressed and how much mouse input was sent. Which keys, and where
 the mouse went, are never recorded.
+
+### Mouse jiggler
+
+With the jiggler on, a target that has had no input for a minute gets its
+pointer moved a few pixels and straight back, then again every minute, so it
+doesn't dim, lock or go to sleep. The server does it, whether or not anyone is
+watching or driving. It starts from where the pointer was last put, or the
+middle of the screen if nobody has moved it since the target started. It
+waits while a mouse button is held down, so it never drags. It doesn't count
+as anyone's input: it keeps no control lock from being released
+as idle, and isn't in a control session's `mouse_count`.
+
+| Route | Role | |
+|---|---|---|
+| `GET /api/targets/:id/input/settings` | Operator, browser session | `{"mouse_jiggler":false}` |
+| `PUT /api/targets/:id/input/settings` | Operator, browser session | Turn it on or off: `{"mouse_jiggler":true}`. Takes effect at once; the video and the keyboard/mouse connection carry on undisturbed. |
+
+An Owner can also set `mouse_jiggler` with the target's other fields
+(`POST /api/targets`, `PUT /api/targets/:id`).
 
 ## Video health
 
@@ -571,7 +592,7 @@ $ curl -H 'Authorization: Bearer <owner token>' \
 The event types are `auth.setup`, `auth.login`, `auth.logout`,
 `auth.password_change`, `token.create`, `token.revoke`, `user.create`,
 `user.role_change`, `user.delete`, `target.create`, `target.update`,
-`target.delete`, `target.video_settings`, `target.input_test`,
+`target.delete`, `target.video_settings`, `target.input_settings`, `target.input_test`,
 `target.baud_change`, `server.ice_servers`, `tls.ca_created`, `tls.csr_created`,
 `tls.certificate_installed` (`source` is `upload`, `csr`, `houstonkvm-ca`; a
 self-renewal is by `(auto-renew)`),
@@ -638,8 +659,9 @@ when the line names one.
 
 Older clients, and simple scripts, can leave the target out: `/api/stream`,
 `/api/snapshot`, `/api/input`, `/api/input/ws`, `/api/control/acquire`,
-`/api/control/release`, `/api/control/status`, `/api/video/settings`,
-`/api/video/capabilities`, `/api/webrtc/subscribe` and `/api/webrtc/answer`
+`/api/control/release`, `/api/control/status`, `/api/input/settings`,
+`/api/video/settings`, `/api/video/capabilities`, `/api/webrtc/subscribe` and
+`/api/webrtc/answer`
 mean the same as their `/api/targets/:id/…` forms, applied to the **default
 target**.
 

@@ -4,6 +4,42 @@ What changed in each release of HoustonKVM. Versions follow
 [Semantic Versioning](https://semver.org/); while the version is 0.x, a minor
 release can change behaviour.
 
+## 0.3.0 (2026-10-29)
+
+- A mouse jiggler, per target, so a machine left alone doesn't dim, lock or go
+  to sleep. With it on, the server moves the pointer a few pixels and back
+  after a minute without input, whether or not anyone has the page open.
+  Operators and Owners turn it on with the new **Mouse jiggler** button on the
+  target's page (or, from a browser session like the video settings,
+  `PUT /api/targets/:id/input/settings`); everyone sees a "Mouse jiggler on"
+  tag. It waits while a mouse button is held, so it can never drag. Turning
+  it on or off doesn't interrupt the video, and it never counts as anyone's
+  input: it keeps no control lock alive and isn't in the audit log's mouse
+  counts. The change itself is audited as `target.input_settings`.
+- Low-latency (WebRTC) video works on EL9 again. With EPEL 9's
+  libdatachannel 0.23.1, which 0.2.1 installs, a viewer got about five
+  seconds of picture, and none at all once the server had been up for a
+  minute or so: that version drops the viewers' RTCP reports, so the server
+  took each viewer for gone, and lets every WebRTC connection fail about a
+  minute after it connects. The EL9 package now bundles libdatachannel
+  0.24.5, as the EL10 one does, until EPEL ships 0.24 or later. Built
+  against 0.23.0 or 0.23.1 anyway, HoustonKVM works around the dropped
+  reports.
+- The web UI's video shows each frame as it arrives. Chrome, Edge and other
+  Chromium browsers show a frame of an MJPEG stream only once the next one
+  starts, so the picture was always a frame behind, and the last change
+  before the screen went still could take up to two seconds to appear. In
+  those browsers the UI now asks for the stream with `?headers=early` (see
+  [docs/API.md](docs/API.md)); without it the stream is unchanged, and
+  that's what Safari and Firefox get.
+- Low-latency (WebRTC) video costs about a quarter less CPU. Capture cards
+  that send 4:2:2 JPEGs, as most do, are decoded directly rather than by way
+  of RGB, and a still screen, which most cards send as the same JPEG over
+  and over, isn't decoded again at all. At 720p60 a target being watched
+  went from 46% to 34% of a core on a Xeon E3-1245 v5.
+- Each MJPEG viewer costs about half the CPU it did: a frame now goes out in
+  two writes instead of twelve.
+
 ## 0.2.1 (2026-10-26)
 
 - With `--log-format=json`, every line is JSON again on EL9. EPEL's

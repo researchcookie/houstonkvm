@@ -269,3 +269,33 @@ setInterval(async () => {
     else if (isDriver) { openInputWs(); }
   } catch(e) {}
 }, 5000);
+
+// ─── Mouse jiggler ────────────────────────────────────────────────────────────
+// Keeps the machine from locking or sleeping while nobody touches it. The
+// server does the moving (PUT /input/settings), so it carries on with this tab
+// closed. Operators and Owners, like the Display panel.
+const jigglerBtn = document.getElementById('jiggler-btn');
+
+function updateJigglerButton() {
+  setShown(jigglerBtn, !!currentTarget && currentTarget.enabled && canTuneVideo());
+  const on = !!currentTarget && !!currentTarget.mouse_jiggler;
+  jigglerBtn.setAttribute('aria-pressed', String(on));
+  jigglerBtn.classList.toggle('btn-accent', on);
+}
+
+// Sends what the button promises (on when it shows off), so a click against a
+// state someone else changed a moment ago still ends where the person meant.
+// Disabled meanwhile, so a double click can't send it twice.
+jigglerBtn.addEventListener('click', async () => {
+  const id = currentTargetId;
+  const on = jigglerBtn.getAttribute('aria-pressed') !== 'true';
+  jigglerBtn.disabled = true;
+  let r;
+  try { r = await send('PUT', `/api/targets/${id}/input/settings`, {mouse_jiggler: on}); }
+  catch (e) { r = {ok: false, text: 'Could not reach the server'}; }
+  finally { jigglerBtn.disabled = false; }
+  if (currentTargetId !== id) return;
+  if (!r.ok) { setCtrlHint(r.text || 'Could not change the mouse jiggler', true); return; }
+  currentTarget.mouse_jiggler = on;
+  renderTargetHeader();
+});

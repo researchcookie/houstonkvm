@@ -720,6 +720,7 @@ bool SelectiveForwardingUnit::setSubscribeAnswer(const std::string &roomId,
     }
 
     rtc::Description answer(sdp, "answer");
+    rtc_compat::nameSentSsrcs(answer, {{"video", VIDEO_SSRC}, {"audio", AUDIO_SSRC}});
     try {
         subIt->second->peerConnection->setRemoteDescription(answer);
     } catch (const std::exception& e) {

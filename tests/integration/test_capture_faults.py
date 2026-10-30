@@ -265,6 +265,56 @@ class TestSyntheticUnplug(ServerTestCase):
         self.assertEqual(seen, {"no_signal"})
         self.assertTrue(self.capture_active(tid))
 
+    def test_early_headers_end_each_frame_on_the_next_parts_headers(self):
+        # Chromium shows a multipart part once the next part's headers have
+        # arrived, so with ?headers=early each frame brings them along. Sent
+        # with the next frame instead, the last one before a pause (a still
+        # screen's deduplicated frames, or a lost signal) isn't shown at all.
+        flag = self.unplug_file("pause")
+        tid = self.make_target(f"?nosignal={flag}")
+        self.wait_for_video(tid, "good", timeout=5)
+        next_part = b"--frame\r\nContent-Type: image/jpeg"
+
+        def watch(until, query="?headers=early"):
+            sock = self.owner.connect(timeout=5)
+            try:
+                sock.sendall(f"GET /api/targets/{tid}/stream{query} HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                             f"{self.owner.cookie_header()}\r\n".encode())
+                data = b""
+                while not until(data):
+                    chunk = sock.recv(65536)
+                    self.assertTrue(chunk, "the stream closed")
+                    data += chunk
+                # Then until it goes quiet.
+                sock.settimeout(0.5)
+                try:
+                    while chunk := sock.recv(65536):
+                        data += chunk
+                except socket.timeout:
+                    pass
+                return data
+            finally:
+                sock.close()
+
+        def pause(data):
+            if data.count(b"--frame") >= 3:
+                flag.touch()
+                return True
+            return False
+
+        # The chunked encoding's CRLFs aside, it goes quiet on those headers.
+        data = watch(pause)
+        self.assertTrue(data.rstrip(b"\r\n").endswith(next_part), data[-60:])
+        self.assertNotIn(b"Content-Length: ", data.split(b"\r\n\r\n", 1)[1][:200])
+        # A viewer who joins during the pause gets the last frame, complete.
+        data = watch(lambda data: data.count(b"--frame") >= 2)
+        self.assertEqual(data.count(b"--frame"), 2, data[:200])
+        self.assertTrue(data.rstrip(b"\r\n").endswith(next_part), data[-60:])
+        # Without it, the parts are as they always were, each with its length.
+        data = watch(lambda data: b"\xff\xd9" in data, query="")
+        self.assertIn(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ", data)
+        self.assertTrue(data.rstrip(b"\r\n").endswith(b"\xff\xd9"), data[-60:])
+
     def test_other_targets_carry_on(self):
         flag = self.unplug_file("neighbour")
         faulty = self.make_target(f"?unplugged={flag}")

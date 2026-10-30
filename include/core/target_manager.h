@@ -157,6 +157,10 @@ public:
     // disables the idle release. Set before startDriverRevalidation().
     void setControlIdleTimeout(std::chrono::milliseconds ms) { controlIdleTimeout_ = ms; }
 
+    // How long a target with the mouse jiggler on goes without input before
+    // the pointer is nudged (InputQueue::setJiggler). Call before loadAll().
+    void setJiggleInterval(std::chrono::milliseconds ms) { jiggleInterval_ = ms; }
+
     // Force-closes every /api/stream client on every target (shutdown).
     void closeAllStreams();
 
@@ -194,6 +198,7 @@ private:
     struct us_timer_t*                       revalidateTimer_ = nullptr;
     std::function<bool(const std::string&)>  stillValid_;
     std::chrono::milliseconds                controlIdleTimeout_{std::chrono::minutes(10)};
+    std::chrono::milliseconds                jiggleInterval_{std::chrono::minutes(1)};
 
     // Background jobs (retiring runtimes, deferred starts). Detached, but
     // counted so the destructor can wait for all of them.

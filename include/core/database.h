@@ -69,6 +69,9 @@ public:
         std::vector<std::string> tags;        // lowercase, sorted
         bool                     enabled = true;   // disabled = no capture/encode/input running
         bool                     isDefault = false; // what the unscoped /api/* routes address
+        // Nudges the pointer after a minute without input (InputQueue). Not
+        // in `settings`, whose every change rebuilds the whole pipeline.
+        bool                     mouseJiggler = false;
         TargetSettings           settings;
     };
 

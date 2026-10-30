@@ -62,11 +62,13 @@ int main(int argc, char* argv[]) {
     std::optional<int> httpsPort;
     // Hidden, for tests: where the configuration's certificate is looked
     // for, how long an HTTPS switch waits to be confirmed, how long the own
-    // CA's certificates last, and how often renewal is checked.
+    // CA's certificates last, how often renewal is checked, and how long the
+    // mouse jiggler waits for input.
     std::string tlsConfigDir  = "/etc/houstonkvm/tls";
     int         tlsConfirmSeconds = 120;
     int         tlsCertDays = 397;
     int         tlsRenewCheckSeconds = 3600;
+    int         mouseJiggleSeconds = 60;
     bool        jsonLogs      = false;
 
     for (int i = 1; i < argc; ++i) {
@@ -157,12 +159,14 @@ int main(int argc, char* argv[]) {
         else if (arg.starts_with("--tls-config-dir="))
             tlsConfigDir = std::string(arg.substr(17));
         else if (arg.starts_with("--tls-confirm-seconds=") || arg.starts_with("--tls-cert-days=") ||
-                 arg.starts_with("--tls-renew-check-seconds=")) {
+                 arg.starts_with("--tls-renew-check-seconds=") ||
+                 arg.starts_with("--mouse-jiggle-seconds=")) {
             auto eq = arg.find('=');
             auto name = arg.substr(0, eq);
-            int& target = name == "--tls-confirm-seconds" ? tlsConfirmSeconds
-                        : name == "--tls-cert-days"       ? tlsCertDays
-                                                          : tlsRenewCheckSeconds;
+            int& target = name == "--tls-confirm-seconds"      ? tlsConfirmSeconds
+                        : name == "--tls-cert-days"            ? tlsCertDays
+                        : name == "--tls-renew-check-seconds"  ? tlsRenewCheckSeconds
+                                                               : mouseJiggleSeconds;
             try {
                 size_t used = 0;
                 auto value = std::string(arg.substr(eq + 1));
@@ -372,6 +376,7 @@ int main(int argc, char* argv[]) {
             events.emit(e);
         },
     });
+    targets.setJiggleInterval(std::chrono::seconds(mouseJiggleSeconds));
     targets.loadAll();
 
     {

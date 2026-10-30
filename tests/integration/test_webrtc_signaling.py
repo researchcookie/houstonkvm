@@ -223,6 +223,15 @@ class TestEncodeOnDemand(SignalingTestCase):
         time.sleep(2)
         self.assertEqual((self.started_encoding(), self.stopped_encoding()), (started + 1, stopped + 1))
 
+    def test_a_viewer_is_watched_for_longer_than_the_silence_timeout(self):
+        # The SFU takes a viewer it hasn't heard RTCP from for 5 s
+        # (kSubscriberSilenceTimeout) for gone, and the encoder idles, so its
+        # receiver reports have to reach the track. libdatachannel 0.23.0 and
+        # 0.23.1 drop them without rtc_compat::nameSentSsrcs().
+        viewer = self.watch(9)
+        self.assertTrue(viewer["connected"], viewer)
+        self.assertGreater(viewer["fps"], 20, viewer)
+
     def test_a_late_viewer_gets_a_keyframe_at_once(self):
         def viewer(seconds):
             return subprocess.Popen(

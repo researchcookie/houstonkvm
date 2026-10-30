@@ -25,9 +25,10 @@ auto streamHandler = [&auth, &db, &targets](bool scoped) {
            ->writeHeader("Cache-Control", "no-cache")
            ->writeHeader("Connection", "keep-alive");
 
-        target->broadcaster->add(res);
-        if (!target->broadcaster->latest.empty())
-            Broadcaster::writeFrame(res, target->broadcaster->latest);
+        // ?headers=early: each part's headers go out with the frame before
+        // it, without Content-Length, so an <img> shows frames as soon as
+        // they arrive (see Broadcaster).
+        target->broadcaster->add(res, req->getQuery("headers") == "early");
 
         // Capture the id, not the runtime: the target may be stopped or
         // deleted while this connection is open (see TargetManager).

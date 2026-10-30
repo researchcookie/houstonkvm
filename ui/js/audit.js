@@ -63,6 +63,9 @@ function auditWhat(e) {
     case 'target.update':        return 'Changed the target';
     case 'target.delete':        return 'Deleted the target';
     case 'target.video_settings': return 'Changed video settings';
+    case 'target.input_settings':
+      return (d.changes && d.changes.mouse_jiggler)
+        ? `Turned the mouse jiggler ${d.changes.mouse_jiggler.to ? 'on' : 'off'}` : 'Changed input settings';
     case 'target.input_test':    return 'Ran an input test';
     case 'target.baud_change':   return `Changed the adapter's speed to ${d.baud}`;
     case 'server.ice_servers':   return 'Changed the STUN and TURN servers';

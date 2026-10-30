@@ -1,9 +1,11 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <semaphore>
 #include <string>
 #include <string_view>
@@ -82,6 +84,14 @@ public:
     // Characters not yet typed. Safe from any thread.
     size_t textRemaining() const { return textRemaining_.load(std::memory_order_relaxed); }
 
+    // The mouse jiggler, which keeps a target from dimming, locking or
+    // sleeping while nobody touches it: after `every` with no input it moves
+    // the pointer a few pixels and back. From where the driver last left it,
+    // or the middle of the screen if nobody has moved it since the target
+    // started. Not driver activity: it keeps no control lock alive (see
+    // TargetRuntime::lastActivity) and isn't counted in the audit log.
+    void setJiggler(bool on, std::chrono::milliseconds every);
+
     static constexpr size_t kMaxPendingText = 65536;
 
 private:
@@ -94,6 +104,9 @@ private:
     void releaseAllNow();
     bool typingActive() const;
     bool typeStep();
+    std::optional<std::chrono::steady_clock::time_point> nextJiggleAt() const;
+    void jiggleStep(std::chrono::steady_clock::time_point now);
+    void returnFromJiggle();
 
     StreamManager&    streamManager_;
     std::thread       worker_;
@@ -147,6 +160,15 @@ private:
     // across a run of shifted characters rather than being tapped for each.
     const char* typingKey_  = nullptr; // pressed, not yet released
     bool        shiftHeld_  = false;
+
+    // Jiggler settings, from the event-loop thread; the rest is worker-only.
+    std::atomic<bool>    jiggler_{false};
+    std::atomic<int64_t> jiggleEveryMs_{60000};
+    std::chrono::steady_clock::time_point quietSince_;   // last input or jiggle
+    std::chrono::steady_clock::time_point jiggleBackAt_;
+    bool    jiggledOut_ = false;          // the pointer is a step away, coming back
+    double  pointerX_ = 0.5, pointerY_ = 0.5;   // where the driver last put it
+    uint8_t buttonsHeld_ = 0;             // by the driver, one bit per button
 };
 
 } // namespace houston_kvm

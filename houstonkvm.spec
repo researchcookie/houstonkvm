@@ -3,12 +3,15 @@
 # video, install Cisco's openh264 (epel-cisco-openh264) on the server.
 
 Name:           houstonkvm
-Version:        0.2.1
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        Self-hosted multi-user IP-KVM server
 
-# EL9 and Fedora have libdatachannel; EL10 doesn't yet, so it's bundled there.
-%if 0%{?fedora} || 0%{?rhel} == 9
+# Fedora's libdatachannel is used. EL10 has none yet, and EPEL 9's 0.23.1
+# drops the RTCP for tracks that only send and, with libnice, fails every ICE
+# link about a minute after it connects (fixed in 0.23.2 and 0.24.0), so both
+# bundle it. Use EPEL 9's again once it ships 0.24 or later.
+%if 0%{?fedora}
 %bcond_without system_libdatachannel
 %else
 %bcond_with system_libdatachannel
@@ -199,6 +202,15 @@ HOUSTONKVM_BINARY=%{_vpath_builddir}/HoustonKVM \
 %systemd_postun_with_restart houstonkvm.service
 
 %changelog
+* Thu Oct 29 2026 Laszlo Coleman <laszlo.coleman@researchcookie.com> - 0.3.0-1
+- A mouse jiggler, per target, that keeps an idle machine from locking or
+  going to sleep.
+- Low-latency video works on EL9 again: EPEL 9's libdatachannel 0.23.1 drops
+  viewers' RTCP and fails every connection after about a minute, so the EL9
+  package bundles libdatachannel 0.24.5, as the EL10 one does.
+- MJPEG in Chromium browsers shows each frame as it arrives. Low-latency video
+  costs about a quarter less CPU, and each MJPEG viewer about half.
+
 * Mon Oct 26 2026 Laszlo Coleman <laszlo.coleman@researchcookie.com> - 0.2.1-1
 - JSON logs stay JSON when GLib warns: with EPEL's libdatachannel 0.23 on
   EL9, a GLib warning per WebRTC connection was written as plain text.

@@ -99,7 +99,9 @@ void SfuPublisher::connect() {
         std::string sdp = std::string(sfuOffer);
         for (size_t at; (at = sdp.find("a=end-of-candidates\r\n")) != std::string::npos;)
             sdp.erase(at, std::strlen("a=end-of-candidates\r\n"));
-        pc_->setRemoteDescription(rtc::Description(sdp, "offer"));
+        rtc::Description remote(sdp, "offer");
+        rtc_compat::nameSentSsrcs(remote, {{"video", VIDEO_SSRC}, {"audio", AUDIO_SSRC}});
+        pc_->setRemoteDescription(remote);
     } catch (const std::exception& e) {
         std::cerr << "SfuPublisher: setRemoteDescription failed: " << e.what() << "\n";
         return;
@@ -153,6 +155,8 @@ void SfuPublisher::connect() {
 }
 
 void SfuPublisher::onVideoFrame(const uint8_t* mjpegData, size_t size) {
+    // An idle target skips the copy as well as the encode (see wanted_).
+    if (!wanted_.load(std::memory_order_relaxed)) return;
     {
         std::lock_guard<std::mutex> lock(mailboxMtx_);
         pendingFrame_.assign(mjpegData, mjpegData + size);
@@ -179,11 +183,21 @@ void SfuPublisher::onAudioFrame(const uint8_t* opusData, size_t size,
 }
 
 void SfuPublisher::workerLoop() {
+    // Swapped with pendingFrame_, so the two buffers take turns and neither
+    // is allocated again per frame.
+    std::vector<uint8_t> frame;
     while (running_) {
-        std::vector<uint8_t> frame;
         {
             std::unique_lock<std::mutex> lock(mailboxMtx_);
-            mailboxCv_.wait(lock, [this] { return !running_ || hasPendingFrame_; });
+            if (!mailboxCv_.wait_for(lock, kIdleCheck, [this] { return !running_ || hasPendingFrame_; })) {
+                // No frame: idle (see wanted_), or no picture at all. A
+                // viewer who turns up while idle is found here.
+                lock.unlock();
+                if (!wanted_.load(std::memory_order_relaxed) &&
+                    sfu_.openVideoSubscribers(roomId_, peerId_) > 0)
+                    wanted_.store(true, std::memory_order_relaxed);
+                continue;
+            }
             if (!running_) return;
             frame.swap(pendingFrame_);
             hasPendingFrame_ = false;
@@ -193,7 +207,10 @@ void SfuPublisher::workerLoop() {
 }
 
 void SfuPublisher::processFrame(const uint8_t* mjpegData, size_t size) {
-    if (encoderFailed_ || !videoTrack_ || !videoTrack_->isOpen()) return;
+    if (encoderFailed_ || !videoTrack_ || !videoTrack_->isOpen()) {
+        wanted_.store(false, std::memory_order_relaxed);
+        return;
+    }
 
     // Decoding the MJPEG and encoding H.264 is most of what a target costs
     // (about a quarter of a core at 720p30), so do neither while nobody
@@ -203,6 +220,7 @@ void SfuPublisher::processFrame(const uint8_t* mjpegData, size_t size) {
         if (encoding_)
             std::cout << "SfuPublisher [" << roomId_ << "]: no WebRTC viewers, encoder idle" << std::endl;
         encoding_ = false;
+        wanted_.store(false, std::memory_order_relaxed);
         return;
     }
     if (!encoding_) {

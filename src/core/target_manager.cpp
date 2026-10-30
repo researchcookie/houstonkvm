@@ -117,6 +117,7 @@ void TargetManager::apply(const Database::Target& t) {
     }
 
     if (it != runtimes_.end()) {
+        it->second->inputQueue.setJiggler(t.mouseJiggler, jiggleInterval_);
         if (!(it->second->appliedSettings == t.settings)) {
             it->second->streamManager.applySettings(t.settings);
             it->second->appliedSettings = t.settings;
@@ -138,8 +139,9 @@ void TargetManager::apply(const Database::Target& t) {
     // runtime's late removeParticipant() (see retire()) can then never
     // tear down the participant of a runtime re-created under the same id.
     std::string room = "target-" + std::to_string(t.id) + "-" + std::to_string(nextGeneration_++);
-    runtimes_.emplace(t.id, std::make_unique<TargetRuntime>(t.id, std::move(room), sfu_, loop_,
-                                                            t.settings, hooks_));
+    auto [started, _] = runtimes_.emplace(t.id, std::make_unique<TargetRuntime>(
+        t.id, std::move(room), sfu_, loop_, t.settings, hooks_));
+    started->second->inputQueue.setJiggler(t.mouseJiggler, jiggleInterval_);
     std::cout << "Target " << t.id << " (" << t.name << "): started\n";
 }
 

@@ -45,6 +45,7 @@ inline constexpr std::string_view kTargetCreated   = "target.create";
 inline constexpr std::string_view kTargetUpdated   = "target.update";
 inline constexpr std::string_view kTargetDeleted   = "target.delete";
 inline constexpr std::string_view kVideoSettings   = "target.video_settings";
+inline constexpr std::string_view kInputSettings   = "target.input_settings";
 inline constexpr std::string_view kInputTest       = "target.input_test";
 inline constexpr std::string_view kBaudChange      = "target.baud_change";
 

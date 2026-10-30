@@ -23,6 +23,19 @@ function targetApi(path) {
   return '/api/targets/' + currentTargetId + (path || '');
 }
 
+// Chromium shows an MJPEG frame only once the next one's headers arrive, so
+// it asks for those early (see docs/API.md). Safari shows nothing at all
+// with them, so every other browser gets the plain stream.
+const earlyStreamHeaders = /Chrome\//.test(navigator.userAgent);
+
+// The MJPEG stream URL, with any extra query parameters.
+function streamUrl(query) {
+  const params = new URLSearchParams(query);
+  if (earlyStreamHeaders) params.set('headers', 'early');
+  const qs = params.toString();
+  return targetApi('/stream') + (qs ? '?' + qs : '');
+}
+
 async function openTargetView(id) {
   // Same target again (e.g. the hash was re-set): nothing to rebuild.
   if (currentTargetId === id && currentTarget) return;
@@ -55,7 +68,7 @@ async function openTargetView(id) {
     kvmImg.removeAttribute('src');
     setVideoMessage('This target is disabled. An administrator can enable it on the Admin page.');
   } else {
-    kvmImg.src = targetApi('/stream');
+    kvmImg.src = streamUrl();
     startVideoHealthCheck();
     if (userPrefs.default_stream_mode === 'webrtc') startWebrtc();
   }
@@ -120,6 +133,7 @@ function renderTargetHeader() {
   if (t.description) document.getElementById('kvm-title').title = t.description;
   updateDisplayAvailability();
   updateHealthAvailability();
+  updateJigglerButton();
   updateSoundButton();
 }
 
@@ -181,7 +195,7 @@ async function checkVideoHealth() {
   if (currentTargetId !== id) return; // switched targets while waiting
 
   if (available && videoAvailable === false) {
-    kvmImg.src = targetApi('/stream') + '?r=' + Date.now();
+    kvmImg.src = streamUrl({r: Date.now()});
   }
   videoAvailable = available;
   setVideoMessage(available ? '' : 'No video — waiting for the capture device…');

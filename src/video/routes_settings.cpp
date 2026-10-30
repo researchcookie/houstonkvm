@@ -129,36 +129,17 @@ auto videoSettingsPut = [&auth, &db, &targets, &events](bool scoped) {
         if (!id) return;
         Actor actor = actorOf(*authOpt, clientAddress(auth.policy, res, req));
 
-        readBody(res, 1024, [res, targetId = *id, &db, &targets, &events, actor](std::string& body) {
-            auto j = parseJsonOr400(res, body);
-            if (!j) return;
-            auto target = db.getTarget(targetId);
-            if (!target) { res->writeStatus("404 Not Found")->end("Unknown target"); return; }
-            const Database::Target before = *target;
-
+        // The rebuild happens on the target's own StreamManager worker
+        // thread; this returns at once, same as PUT /api/targets/:id.
+        updateTargetFields(res, *id, db, targets, events, std::move(actor), event::kVideoSettings,
+                           [](const json& j, Database::Target& target) {
             // Only the four operator-level keys are honoured; anything else
             // in the body (device paths, serial config) is ignored here, not
             // applied — those need Owner.
             json allowed = json::object();
             for (const char* key : {"capture_width", "capture_height", "capture_fps", "webrtc_bitrate_kbps"})
-                if (j->is_object() && j->contains(key)) allowed[key] = (*j)[key];
-            if (auto err = applySettingsFields(allowed, target->settings); !err.empty()) {
-                res->writeStatus("400 Bad Request")->end(err);
-                return;
-            }
-            if (!db.updateTarget(*target)) {
-                res->writeStatus("500 Internal Server Error")->end("Server error");
-                return;
-            }
-            // Rebuild happens on the target's own StreamManager worker
-            // thread — this returns immediately, same as PUT /api/targets/:id.
-            if (auto fresh = db.getTarget(targetId)) {
-                if (auto changes = auditChanges(before, *fresh); !changes.empty())
-                    emitTarget(events, event::kVideoSettings, actor, *fresh, {{"changes", changes}});
-                targets.apply(*fresh);
-            }
-
-            res->writeHeader("Content-Type", "application/json")->end(R"({"ok":true})");
+                if (j.is_object() && j.contains(key)) allowed[key] = j[key];
+            return applySettingsFields(allowed, target.settings);
         });
     };
 };

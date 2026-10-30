@@ -455,6 +455,21 @@ class TestVideoAndInputState(UITestCase):
         p.wait_for_function("() => document.getElementById('kvm').naturalWidth > 0")
         expect(p.locator("#video-status")).to_be_hidden()
 
+    def test_only_chromium_asks_for_early_stream_headers(self):
+        # Safari shows nothing of a stream framed with ?headers=early.
+        safari = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+                  "(KHTML, like Gecko) Version/18.0 Safari/605.1.15")
+        for user_agent, early in ((None, True), (safari, False)):
+            with self.subTest(user_agent=user_agent):
+                bp = self.open(user_agent=user_agent)
+                self._fake_picture(bp, {self.cam["id"]})
+                bp.sign_in("op")
+                p = bp.page
+                with p.expect_request(re.compile(r"/api/targets/\d+/stream")) as request:
+                    p.goto(f"{self.base}/#/targets/{self.cam['id']}")
+                self.assertEqual("headers=early" in request.value.url, early, request.value.url)
+                p.wait_for_function("() => document.getElementById('kvm').naturalWidth > 0")
+
     def test_without_a_picture_the_screen_says_it_is_waiting(self):
         bp = self.open("op")
         p = bp.page
@@ -832,6 +847,45 @@ class TestDisplayPanel(UITestCase):
         expect(p.locator("#kvm-title")).to_have_text("Other Box")
         expect(p.locator("#display-panel")).to_be_hidden()
         expect(p.locator("#display-btn")).to_have_attribute("aria-expanded", "false")
+
+
+class TestMouseJiggler(UITestCase):
+    """The jiggler's toggle on the target's page, and the tag everyone sees."""
+
+    @classmethod
+    def seed(cls):
+        cls.add_user("op", "operator")
+        cls.add_user("viewer1", "viewer")
+        cls.box = cls.add_target("Sleepy Box", chip=False, serial_device="/dev/ttyUSB93")
+
+    def jiggler_on(self):
+        return self.owner.as_json(self.owner.get(f"/api/targets/{self.box['id']}")[1])["mouse_jiggler"]
+
+    def test_an_operator_turns_it_on_and_everyone_sees_that_it_is(self):
+        viewer = self.open("viewer1")
+        vp = viewer.page
+        vp.goto(f"{self.base}/#/targets/{self.box['id']}")
+        expect(vp.locator("#kvm-title")).to_have_text("Sleepy Box")
+        expect(vp.locator("#jiggler-btn")).to_be_hidden()
+        expect(vp.locator("#kvm-status")).not_to_contain_text("Mouse jiggler on")
+
+        bp = self.open("op")
+        p = bp.page
+        p.goto(f"{self.base}/#/targets/{self.box['id']}")
+        btn = p.locator("#jiggler-btn")
+        expect(btn).to_have_attribute("aria-pressed", "false")
+        btn.click()
+        expect(btn).to_have_attribute("aria-pressed", "true")
+        expect(p.locator("#kvm-status")).to_contain_text("Mouse jiggler on")
+        self.assertIs(self.jiggler_on(), True)
+        # The viewer's page shows it from its next status poll.
+        expect(vp.locator("#kvm-status")).to_contain_text("Mouse jiggler on", timeout=8000)
+
+        btn.click()
+        expect(btn).to_have_attribute("aria-pressed", "false")
+        expect(p.locator("#kvm-status")).not_to_contain_text("Mouse jiggler on")
+        self.assertIs(self.jiggler_on(), False)
+        self.assert_no_unexpected_errors(bp)
 
 
 class TestInputHealth(UITestCase):

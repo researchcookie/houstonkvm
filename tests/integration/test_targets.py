@@ -478,7 +478,7 @@ class TestMigrationFromSingleTarget(unittest.TestCase):
         try:
             row = conn.execute("SELECT v4l2_device FROM server_settings WHERE id = 1").fetchone()
             self.assertEqual(row[0], "/dev/video7")
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 11)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 12)
         finally:
             conn.close()
 

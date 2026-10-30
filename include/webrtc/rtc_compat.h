@@ -2,7 +2,7 @@
 
 // Builds against both libdatachannel APIs HoustonKVM meets in practice: the
 // current one (0.20 and later, which the RPM bundles on EL10) and 0.19, which
-// is what EPEL 9 ships as libdatachannel-devel. Using the system library
+// EPEL 9 shipped as libdatachannel-devel before 0.23. Using the system library
 // there is what lets the EL9 package stop bundling its own copy.
 //
 // 0.20 replaced the packetization handlers with chainable packetizers and
@@ -10,16 +10,31 @@
 // its presence tells the two apart without a version macro (0.19 has none).
 
 #include <rtc/rtc.hpp>
+#if __has_include(<rtc/version.h>)
+#include <rtc/version.h>
+#endif
 
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
+#include <string_view>
+#include <utility>
+#include <variant>
 
 #if __has_include(<rtc/frameinfo.hpp>)
 #define HOUSTONKVM_RTC_CHAINED_PACKETIZERS 1
 #else
 #define HOUSTONKVM_RTC_CHAINED_PACKETIZERS 0
+#endif
+
+// 0.23.0 and 0.23.1 (EPEL 9's since October 2026) see nameSentSsrcs().
+#if defined(RTC_VERSION_MAJOR) && RTC_VERSION_MAJOR == 0 && RTC_VERSION_MINOR == 23 && \
+    RTC_VERSION_PATCH < 2
+#define HOUSTONKVM_RTC_REMOTE_SSRCS_ONLY 1
+#else
+#define HOUSTONKVM_RTC_REMOTE_SSRCS_ONLY 0
 #endif
 
 namespace rtc_compat {
@@ -118,6 +133,31 @@ inline void sendFrame(rtc::Track& track, rtc::RtpPacketizationConfig& config,
 #else
     config.timestamp = timestamp;
     track.send(data, size);
+#endif
+}
+
+// libdatachannel 0.23.0 and 0.23.1 find the track an incoming RTCP packet is
+// for only among the SSRCs of the remote description (0.23.2 looks in the
+// local one again). Ours only send, so their SSRCs are only in the local one,
+// and every receiver report, keyframe request and NACK for them would be
+// dropped: the SFU would take each viewer for gone after
+// kSubscriberSilenceTimeout. Naming each SSRC we send in its section of the
+// remote description, before it's set, puts it in the lookup. Nothing sends
+// that description on anywhere.
+inline void nameSentSsrcs(rtc::Description& remote,
+                          std::initializer_list<std::pair<std::string_view, uint32_t>> sent) {
+#if HOUSTONKVM_RTC_REMOTE_SSRCS_ONLY
+    for (int i = 0; i < remote.mediaCount(); ++i) {
+        auto entry = remote.media(i);
+        auto* media = std::get_if<rtc::Description::Media*>(&entry);
+        if (!media) continue;
+        for (const auto& [mid, ssrc] : sent)
+            if ((*media)->mid() == mid && !(*media)->hasSSRC(ssrc))
+                (*media)->addSSRC(ssrc, std::nullopt);
+    }
+#else
+    (void)remote;
+    (void)sent;
 #endif
 }
 
